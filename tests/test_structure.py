@@ -70,7 +70,13 @@ def test_public_repository_documents_and_exclusions_are_present() -> None:
 
 
 def test_no_scaffold_placeholders_remain_in_user_facing_files() -> None:
-    for name in ("README.md", "SPEC.md", "metadata.yaml"):
+    for name in (
+        "README.md",
+        "CHANGELOG.md",
+        "SECURITY.md",
+        "THIRD_PARTY_NOTICES.md",
+        "metadata.yaml",
+    ):
         content = (PLUGIN_ROOT / name).read_text(encoding="utf-8")
         assert "{{" not in content
         assert "https://github.com/you/" not in content

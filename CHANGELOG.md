@@ -39,7 +39,7 @@ uses semantic versioning for plugin releases.
 ### Verified
 
 - Passed the AstrBot 4.26.6 / Python 3.12.13 Docker import and isolated-load
-  baseline recorded in `SPEC.md`.
+  baseline for this release.
 - Passed Ruff, Pyright, and 78 project tests at the time of the release build.
 
 ## [0.7.0] - 2026-07-20
