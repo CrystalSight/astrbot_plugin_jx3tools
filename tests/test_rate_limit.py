@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from astrbot_plugin_jx3tools.rate_limit import SessionRateLimiter
+from astrbot_plugin_jx3tools.core.rate_limit import SessionRateLimiter
 
 
 def test_rate_limit_rejects_then_recovers() -> None:

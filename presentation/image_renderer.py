@@ -22,6 +22,8 @@ from .rendering import (
     TableRow,
 )
 
+ASSET_DIRECTORY = Path(__file__).resolve().parents[1] / "assets"
+
 CANVAS_WIDTH = 720
 MAX_CANVAS_HEIGHT = 12_000
 MAX_WRAP_CHARACTERS = 256
@@ -102,7 +104,7 @@ class LocalImageRenderer:
             self.adventure_time_font = ImageFont.truetype(str(font_paths.semibold), 20)
         except OSError as exc:
             raise LocalRenderError("阿里巴巴普惠体无法读取。") from exc
-        self.asset_directory = Path(__file__).resolve().parent / "assets"
+        self.asset_directory = ASSET_DIRECTORY
         self._asset_cache: dict[tuple[str, int], Image.Image | None] = {}
 
     def render(

@@ -11,8 +11,8 @@ from html.parser import HTMLParser
 from statistics import median
 from typing import Any
 
-from .endpoints import EndpointSpec
-from .game_data import (
+from ..core.endpoints import EndpointSpec
+from ..core.game_data import (
     KUNGFU_COLORS,
     KUNGFU_SCHOOLS,
     SALE_LABELS,

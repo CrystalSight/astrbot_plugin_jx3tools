@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from astrbot_plugin_jx3tools.endpoints import ENDPOINT_INDEX
-from astrbot_plugin_jx3tools.rendering import (
+from astrbot_plugin_jx3tools.core.endpoints import ENDPOINT_INDEX
+from astrbot_plugin_jx3tools.presentation.rendering import (
     build_article_document,
     build_document,
     card_identity,

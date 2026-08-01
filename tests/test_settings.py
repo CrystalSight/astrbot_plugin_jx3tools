@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from astrbot_plugin_jx3tools.endpoints import ServiceTier
-from astrbot_plugin_jx3tools.settings import PluginSettings
+from astrbot_plugin_jx3tools.core.endpoints import ServiceTier
+from astrbot_plugin_jx3tools.core.settings import PluginSettings
 
 
 def test_defaults_are_safe() -> None:

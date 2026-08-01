@@ -23,6 +23,8 @@ uses semantic versioning for plugin releases.
 - Hardened article-session ownership, bounded image canvases and long wrapped
   text, made food de-duplication linear, and made render cancellation cleanup
   deterministic.
+- Organized internal Python modules into core and presentation packages without
+  changing commands, configuration, or runtime behavior.
 - Restricted asset synchronization and WebChat smoke tooling to explicitly
   approved hosts and bounded raster inputs.
 - Prepared the project for its first public GitHub hosting with consistent

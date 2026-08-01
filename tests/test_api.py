@@ -6,9 +6,9 @@ import json
 from typing import Any
 
 import aiohttp
-import astrbot_plugin_jx3tools.api as api_module
+import astrbot_plugin_jx3tools.core.api as api_module
 import pytest
-from astrbot_plugin_jx3tools.api import (
+from astrbot_plugin_jx3tools.core.api import (
     JX3ApiClient,
     JX3ApiConfigurationError,
     JX3ApiError,
@@ -16,7 +16,7 @@ from astrbot_plugin_jx3tools.api import (
     _is_allowed_image_url,
     official_article_url,
 )
-from astrbot_plugin_jx3tools.endpoints import ENDPOINT_INDEX
+from astrbot_plugin_jx3tools.core.endpoints import ENDPOINT_INDEX
 
 
 class FakeContent:

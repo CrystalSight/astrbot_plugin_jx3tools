@@ -28,7 +28,7 @@ typeCheckingMode = "basic"
 pythonVersion = "3.12"
 reportMissingImports = false
 reportMissingTypeStubs = false
-include = ["*.py", "tests"]
+include = ["main.py", "core", "presentation", "scripts", "tests"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

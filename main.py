@@ -13,35 +13,35 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, get_astrbot_data_path
 
-from .api import (
+from .core.api import (
     JX3ApiClient,
     JX3ApiConfigurationError,
     JX3ApiError,
     official_article_url,
 )
-from .endpoints import (
+from .core.endpoints import (
     ENDPOINT_INDEX,
     ENDPOINTS,
     TIER_LABELS,
     EndpointSpec,
     ServiceTier,
 )
-from .image_renderer import (
+from .core.query import QueryInputError, parse_command, parse_endpoint_arguments
+from .core.rate_limit import SessionRateLimiter
+from .core.settings import PluginSettings
+from .presentation.image_renderer import (
     FontPaths,
     LocalImageRenderer,
     LocalRenderError,
     temporary_image_path,
 )
-from .query import QueryInputError, parse_command, parse_endpoint_arguments
-from .rate_limit import SessionRateLimiter
-from .rendering import (
+from .presentation.rendering import (
     build_article_document,
     build_document,
     card_identity,
     format_text,
     item_search_names,
 )
-from .settings import PluginSettings
 
 PLUGIN_NAME = "astrbot_plugin_jx3tools"
 ARTICLE_SELECTION_SECONDS = 10.0

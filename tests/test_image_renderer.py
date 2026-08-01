@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from astrbot_plugin_jx3tools import image_renderer
-from astrbot_plugin_jx3tools.game_data import fixed_asset_name
-from astrbot_plugin_jx3tools.image_renderer import (
+from astrbot_plugin_jx3tools.core.game_data import fixed_asset_name
+from astrbot_plugin_jx3tools.presentation import image_renderer
+from astrbot_plugin_jx3tools.presentation.image_renderer import (
     ARENA_PROFILE_RIGHT_COLUMN_SHIFT,
     CANVAS_WIDTH,
     CONTENT_WIDTH,
@@ -23,7 +23,7 @@ from astrbot_plugin_jx3tools.image_renderer import (
     _wrap_food_item,
     decode_source_image,
 )
-from astrbot_plugin_jx3tools.rendering import (
+from astrbot_plugin_jx3tools.presentation.rendering import (
     AdventureGroup,
     AdventureItem,
     CalendarDay,
@@ -54,6 +54,20 @@ def _private_font_paths() -> FontPaths | None:
         (FontPaths.from_directory(path) for path in candidates if path.is_dir()),
         None,
     )
+
+
+def test_asset_directory_stays_at_plugin_root() -> None:
+    assert image_renderer.ASSET_DIRECTORY == (
+        Path(__file__).resolve().parents[1] / "assets"
+    )
+
+
+def test_missing_fixed_asset_uses_safe_fallback(tmp_path: Path) -> None:
+    renderer = object.__new__(LocalImageRenderer)
+    renderer.asset_directory = tmp_path / "assets"
+    renderer._asset_cache = {}
+
+    assert renderer._load_asset("adventures/missing.png", 132) is None
 
 
 def test_source_image_accepts_raster_and_rejects_unknown_bytes(

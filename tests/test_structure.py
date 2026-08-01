@@ -8,6 +8,33 @@ import tomllib
 from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+REQUIRED_ROOT_FILES = {
+    "main.py",
+    "metadata.yaml",
+    "_conf_schema.json",
+    "requirements.txt",
+    "pyproject.toml",
+}
+CORE_MODULES = {
+    "__init__.py",
+    "api.py",
+    "endpoints.py",
+    "game_data.py",
+    "query.py",
+    "rate_limit.py",
+    "settings.py",
+}
+PRESENTATION_MODULES = {"__init__.py", "image_renderer.py", "rendering.py"}
+FLAT_RUNTIME_MODULES = (CORE_MODULES | PRESENTATION_MODULES) - {"__init__.py"}
+
+
+def test_runtime_source_is_grouped_by_responsibility() -> None:
+    assert all((PLUGIN_ROOT / name).is_file() for name in REQUIRED_ROOT_FILES)
+    assert {path.name for path in (PLUGIN_ROOT / "core").glob("*.py")} == CORE_MODULES
+    assert {
+        path.name for path in (PLUGIN_ROOT / "presentation").glob("*.py")
+    } == PRESENTATION_MODULES
+    assert not any((PLUGIN_ROOT / name).exists() for name in FLAT_RUNTIME_MODULES)
 
 
 def test_configuration_is_grouped() -> None:
@@ -35,7 +62,7 @@ def test_runtime_dependencies_and_fonts_are_declared_safely() -> None:
 def test_public_repository_identity_and_versions_are_consistent() -> None:
     metadata = (PLUGIN_ROOT / "metadata.yaml").read_text(encoding="utf-8")
     project = tomllib.loads((PLUGIN_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    api = (PLUGIN_ROOT / "api.py").read_text(encoding="utf-8")
+    api = (PLUGIN_ROOT / "core" / "api.py").read_text(encoding="utf-8")
 
     metadata_version = re.search(r"^version: v([^\s]+)$", metadata, re.MULTILINE)
     user_agent_version = re.search(r"astrbot-plugin-jx3tools/([0-9.]+)", api)

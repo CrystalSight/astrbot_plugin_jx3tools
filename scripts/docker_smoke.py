@@ -11,21 +11,21 @@ from typing import Any
 
 from PIL import Image
 
-from ..api import JX3ApiClient, JX3ApiError
-from ..endpoints import ENDPOINT_INDEX, EndpointSpec
-from ..image_renderer import (
+from ..core.api import JX3ApiClient, JX3ApiError
+from ..core.endpoints import ENDPOINT_INDEX, EndpointSpec
+from ..core.settings import PluginSettings
+from ..main import Jx3toolsPlugin
+from ..presentation.image_renderer import (
     FontPaths,
     LocalImageRenderer,
 )
-from ..main import Jx3toolsPlugin
-from ..rendering import (
+from ..presentation.rendering import (
     RenderDocument,
     build_article_document,
     build_document,
     card_identity,
     item_search_names,
 )
-from ..settings import PluginSettings
 
 LEGACY_BACKUP_BASE_URL = "https://api.jx3api.com"
 

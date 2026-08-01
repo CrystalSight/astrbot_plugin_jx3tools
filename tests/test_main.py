@@ -9,7 +9,7 @@ from typing import Any
 
 import astrbot_plugin_jx3tools.main as main_module
 import pytest
-from astrbot_plugin_jx3tools.api import JX3ApiError
+from astrbot_plugin_jx3tools.core.api import JX3ApiError
 from astrbot_plugin_jx3tools.main import Jx3toolsPlugin
 
 

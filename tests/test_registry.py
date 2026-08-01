@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from astrbot_plugin_jx3tools.endpoints import (
+from astrbot_plugin_jx3tools.core.endpoints import (
     ENDPOINT_INDEX,
     ENDPOINTS,
     ServiceTier,
 )
-from astrbot_plugin_jx3tools.query import (
+from astrbot_plugin_jx3tools.core.query import (
     QueryInputError,
     parse_command,
     parse_endpoint_arguments,
