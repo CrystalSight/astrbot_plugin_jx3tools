@@ -1,0 +1,35 @@
+[project]
+name = "astrbot-plugin-jx3tools"
+version = "0.7.2"
+description = "Query JX3API and render concise ink-wash result cards"
+requires-python = ">=3.12"
+dependencies = ["aiohttp>=3.11,<4", "Pillow>=12,<13"]
+
+[project.optional-dependencies]
+dev = [
+  "jinja2>=3.1,<4",
+  "pyright>=1.1.400",
+  "pytest>=8.4.1",
+  "pytest-asyncio>=1.1.0",
+  "pytest-cov>=6.2.1",
+  "ruff>=0.15.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["F", "W", "E", "ASYNC", "C4", "Q", "I", "UP"]
+ignore = ["E501"]
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+reportMissingImports = false
+reportMissingTypeStubs = false
+include = ["*.py", "tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

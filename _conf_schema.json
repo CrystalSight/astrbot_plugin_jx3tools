@@ -1,0 +1,120 @@
+{
+  "general": {
+    "type": "object",
+    "description": "通用设置",
+    "hint": "控制插件开关、JX3API 地址与默认区服。",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "启用查询功能",
+        "default": true
+      },
+      "api_base_url": {
+        "type": "string",
+        "description": "JX3API 基础地址",
+        "hint": "本版本默认使用兼容旧 Token 的备份服务；仅接受不含路径的 HTTPS 地址，聊天用户不能覆盖。",
+        "default": "https://api.jx3api.com"
+      },
+      "default_server": {
+        "type": "string",
+        "description": "默认区服",
+        "hint": "未提供区服时自动补齐；留空则要求用户填写。",
+        "default": ""
+      }
+    }
+  },
+  "credentials": {
+    "type": "object",
+    "description": "JX3API 凭据",
+    "hint": "凭据仅按接口需要注入，不会出现在日志、帮助或图片中。",
+    "obvious_hint": true,
+    "items": {
+      "token": {
+        "type": "string",
+        "description": "JX3API Token",
+        "obvious_hint": true,
+        "default": ""
+      },
+      "ticket": {
+        "type": "string",
+        "description": "推栏 Ticket",
+        "hint": "仅阵眼和名剑等需要 Ticket 的接口使用。",
+        "obvious_hint": true,
+        "default": ""
+      }
+    }
+  },
+  "features": {
+    "type": "object",
+    "description": "功能分组",
+    "hint": "按用户可见的免费、会员、其他三类控制。",
+    "items": {
+      "free_enabled": {
+        "type": "bool",
+        "description": "启用免费功能",
+        "default": true
+      },
+      "member_enabled": {
+        "type": "bool",
+        "description": "启用会员功能",
+        "default": true
+      },
+      "other_enabled": {
+        "type": "bool",
+        "description": "启用其他功能",
+        "default": true
+      }
+    }
+  },
+  "network": {
+    "type": "object",
+    "description": "网络与限流",
+    "hint": "限制第三方请求占用；所有值还会在代码中执行边界校验。",
+    "items": {
+      "timeout_seconds": {
+        "type": "int",
+        "description": "请求总超时（秒）",
+        "default": 20
+      },
+      "max_concurrency": {
+        "type": "int",
+        "description": "最大并发请求数",
+        "default": 4
+      },
+      "requests_per_minute": {
+        "type": "int",
+        "description": "每会话每分钟请求数",
+        "default": 12
+      },
+      "max_response_kib": {
+        "type": "int",
+        "description": "最大响应大小（KiB）",
+        "default": 4096
+      }
+    }
+  },
+  "presentation": {
+    "type": "object",
+    "description": "结果展示",
+    "hint": "图片在本地使用 Pillow 和持久化目录中的阿里巴巴普惠体生成。",
+    "items": {
+      "render_mode": {
+        "type": "string",
+        "description": "渲染模式",
+        "hint": "auto 遵循各功能设计；text 尽量使用文字；image 尽量使用图片。骚话、舔狗、解密和开服始终为文字。",
+        "options": [
+          "auto",
+          "text",
+          "image"
+        ],
+        "default": "auto"
+      },
+      "max_items": {
+        "type": "int",
+        "description": "普通列表最多展示项目数",
+        "hint": "明确要求完整展示的功能不受此项截断。",
+        "default": 30
+      }
+    }
+  }
+}
