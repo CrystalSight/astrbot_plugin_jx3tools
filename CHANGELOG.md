@@ -3,6 +3,25 @@
 All notable changes to this project are documented in this file. The project
 uses semantic versioning for plugin releases.
 
+## [0.7.3] - 2026-08-02
+
+### Changed
+
+- Replaced the excluded adventure thumbnails with project-owned transparent
+  ink-ring name badges produced by an offline, reproducible build script.
+- Removed Baizhan boss portraits and placed every index on a fixed baseline;
+  one- and two-line names share a centered two-line slot while preserving the
+  ten-column snake route.
+- Removed the JX3BOX image synchronization path; retained the legacy ignore
+  rules and added safe local fallbacks for missing or future adventure badges.
+
+### Fixed
+
+- Replaced the missing-glyph box in the `侠行囧途` badge with a project-made
+  wordmark override and made offline builds reject undeclared missing glyphs.
+- Locked offline badge builds to the manifest's font SHA-256 and bounded
+  missing-badge fallback labels to two lines without overflowing the badge.
+
 ## [0.7.2] - 2026-08-01
 
 ### Fixed

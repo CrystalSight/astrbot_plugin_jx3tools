@@ -211,7 +211,6 @@ class MapNode:
 
     index: int
     name: str
-    icon_asset: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,11 +226,11 @@ class FoodRow:
 
 @dataclass(frozen=True, slots=True)
 class AdventureItem:
-    """One vertically stacked adventure icon, trigger time, and name."""
+    """One vertically stacked adventure badge and trigger time."""
 
     name: str
     trigger_time: str
-    icon_asset: str
+    badge_asset: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,7 +559,6 @@ def _monster_document(
                 MapNode(
                     index=index,
                     name=name,
-                    icon_asset=fixed_asset_name("bosses", name),
                 )
             )
     start = _beijing_time(data.get("start"))
@@ -715,7 +713,7 @@ def _event_records_document(
             AdventureItem(
                 name=name,
                 trigger_time=trigger_time.replace(" ", "\n", 1),
-                icon_asset=fixed_asset_name("adventures", name),
+                badge_asset=fixed_asset_name("adventure_badges", name),
             )
         )
     groups = tuple(

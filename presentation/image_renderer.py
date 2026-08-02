@@ -27,6 +27,9 @@ ASSET_DIRECTORY = Path(__file__).resolve().parents[1] / "assets"
 CANVAS_WIDTH = 720
 MAX_CANVAS_HEIGHT = 12_000
 MAX_WRAP_CHARACTERS = 256
+MAX_ADVENTURE_BADGE_NAME_CHARACTERS = 32
+ADVENTURE_BADGE_TEXT_WIDTH = 150
+ADVENTURE_BADGE_TEXT_HEIGHT = 112
 MARGIN = 48
 CONTENT_WIDTH = CANVAS_WIDTH - MARGIN * 2
 REGULAR_FONT_NAME = "AlibabaPuHuiTi-3-55-Regular.ttf"
@@ -100,7 +103,10 @@ class LocalImageRenderer:
             self.food_item_font = ImageFont.truetype(str(font_paths.regular), 20)
             self.food_item_small_font = ImageFont.truetype(str(font_paths.regular), 18)
             self.food_item_compact_font = ImageFont.truetype(str(font_paths.regular), 16)
-            self.adventure_name_font = ImageFont.truetype(str(font_paths.regular), 18)
+            self.adventure_badge_fonts = tuple(
+                ImageFont.truetype(str(font_paths.semibold), size)
+                for size in (40, 36, 32, 28, 24, 20, 16)
+            )
             self.adventure_time_font = ImageFont.truetype(str(font_paths.semibold), 20)
         except OSError as exc:
             raise LocalRenderError("阿里巴巴普惠体无法读取。") from exc
@@ -472,7 +478,7 @@ class LocalImageRenderer:
         gap = 18
         width = (CONTENT_WIDTH - gap * (columns - 1)) / columns
         heights = [
-            self._measure_adventure_item(draw, item.name, item.trigger_time, width)
+            self._measure_adventure_item(draw, item.trigger_time, width)
             for item in group.items
         ]
         total = 58
@@ -483,14 +489,12 @@ class LocalImageRenderer:
     def _measure_adventure_item(
         self,
         draw: ImageDraw.ImageDraw,
-        name: str,
         trigger_time: str,
         width: float,
     ) -> int:
         text_width = max(30, width - 16)
         time_lines = _wrap(draw, trigger_time, self.adventure_time_font, text_width)
-        name_lines = _wrap(draw, name, self.adventure_name_font, text_width)
-        return 18 + 132 + 12 + len(time_lines) * 27 + 7 + len(name_lines) * 24 + 14
+        return 18 + 156 + 12 + len(time_lines) * 27 + 14
 
     def _draw_document(
         self,
@@ -1011,7 +1015,7 @@ class LocalImageRenderer:
         gap = 18
         width = (CONTENT_WIDTH - gap * (columns - 1)) / columns
         heights = [
-            self._measure_adventure_item(draw, item.name, item.trigger_time, width)
+            self._measure_adventure_item(draw, item.trigger_time, width)
             for item in group.items
         ]
         for start in range(0, len(group.items), columns):
@@ -1023,10 +1027,10 @@ class LocalImageRenderer:
                 left = MARGIN + column * (width + gap)
                 center_x = left + width / 2
                 cursor = y + 18
-                asset = self._load_asset(item.icon_asset, 132)
+                asset = self._load_asset(item.badge_asset, 156)
                 if asset is not None:
-                    if max(asset.size) < 132:
-                        scale = 132 / max(asset.size)
+                    if max(asset.size) < 156:
+                        scale = 156 / max(asset.size)
                         asset = asset.resize(
                             (
                                 max(1, round(asset.width * scale)),
@@ -1040,12 +1044,14 @@ class LocalImageRenderer:
                         asset if asset.mode == "RGBA" else None,
                     )
                 else:
-                    draw.rounded_rectangle(
-                        (center_x - 64, cursor, center_x + 64, cursor + 128),
-                        radius=14,
-                        fill=TRACK,
+                    self._draw_adventure_badge_fallback(
+                        draw,
+                        image,
+                        item.name,
+                        center_x,
+                        cursor,
                     )
-                cursor += 144
+                cursor += 168
                 for line in _wrap(
                     draw,
                     item.trigger_time,
@@ -1060,23 +1066,140 @@ class LocalImageRenderer:
                         fill=TEXT,
                     )
                     cursor += 27
-                cursor += 7
-                for line in _wrap(
-                    draw,
-                    item.name,
-                    self.adventure_name_font,
-                    width - 16,
-                ):
-                    line_width = draw.textlength(line, font=self.adventure_name_font)
-                    draw.text(
-                        (center_x - line_width / 2, cursor),
-                        line,
-                        font=self.adventure_name_font,
-                        fill=MUTED,
-                    )
-                    cursor += 24
             y += row_height + 24
         return y + 14, False
+
+    def _draw_adventure_badge_fallback(
+        self,
+        draw: ImageDraw.ImageDraw,
+        image: Image.Image,
+        name: str,
+        center_x: float,
+        top: int,
+    ) -> None:
+        ring = self._load_asset("adventure_badges/ink_ring.png", 156)
+        if ring is not None:
+            image.paste(
+                ring,
+                (round(center_x - ring.width / 2), top + (156 - ring.height) // 2),
+                ring if ring.mode == "RGBA" else None,
+            )
+        else:
+            draw.arc(
+                (center_x - 73, top + 5, center_x + 73, top + 151),
+                18,
+                345,
+                fill="#202b29",
+                width=15,
+            )
+        selected_font, lines, line_bounds = self._layout_adventure_badge_name(
+            draw,
+            name,
+        )
+        line_heights = [bounds[3] - bounds[1] for bounds in line_bounds]
+        total_height = sum(line_heights) + max(0, len(lines) - 1) * 2
+        text_y = top + (156 - total_height) / 2
+        for line, bounds, line_height in zip(
+            lines,
+            line_bounds,
+            line_heights,
+            strict=True,
+        ):
+            line_width = bounds[2] - bounds[0]
+            draw.text(
+                (center_x - line_width / 2 - bounds[0], text_y - bounds[1]),
+                line,
+                font=selected_font,
+                fill="#202b29",
+                stroke_width=2,
+                stroke_fill="#f6f0e5",
+            )
+            text_y += line_height + 2
+
+    def _layout_adventure_badge_name(
+        self,
+        draw: ImageDraw.ImageDraw,
+        name: str,
+    ) -> tuple[
+        ImageFont.FreeTypeFont,
+        list[str],
+        list[tuple[float, float, float, float]],
+    ]:
+        """Fit a bounded fallback label into no more than two centered lines."""
+        normalized = " ".join(str(name).split()) or "-"
+        bounded = (
+            normalized
+            if len(normalized) <= MAX_ADVENTURE_BADGE_NAME_CHARACTERS
+            else f"{normalized[: MAX_ADVENTURE_BADGE_NAME_CHARACTERS - 1]}…"
+        )
+        base = bounded[:-1] if bounded.endswith("…") else bounded
+        candidates = [bounded]
+        candidates.extend(
+            f"{base[:keep].rstrip()}…" for keep in range(len(base) - 1, 0, -1)
+        )
+        candidates.append("…")
+        for candidate_text in dict.fromkeys(candidates):
+            fitting: list[
+                tuple[
+                    float,
+                    int,
+                    float,
+                    float,
+                    ImageFont.FreeTypeFont,
+                    tuple[str, ...],
+                    list[tuple[float, float, float, float]],
+                ]
+            ] = []
+            for font in self.adventure_badge_fonts:
+                layouts: list[tuple[str, ...]] = [(candidate_text,)]
+                layouts.extend(
+                    (candidate_text[:split].rstrip(), candidate_text[split:].lstrip())
+                    for split in range(1, len(candidate_text))
+                    if candidate_text[:split].rstrip()
+                    and candidate_text[split:].lstrip()
+                )
+                for lines in layouts:
+                    bounds = [
+                        draw.textbbox((0, 0), line, font=font, stroke_width=2)
+                        for line in lines
+                    ]
+                    widths = [right - left for left, _top, right, _bottom in bounds]
+                    line_heights = [
+                        bottom - top for _left, top, _right, bottom in bounds
+                    ]
+                    total_height = sum(line_heights) + max(0, len(lines) - 1) * 2
+                    if (
+                        max(widths) <= ADVENTURE_BADGE_TEXT_WIDTH
+                        and total_height <= ADVENTURE_BADGE_TEXT_HEIGHT
+                    ):
+                        balance = abs(widths[0] - widths[-1])
+                        effective_size = font.size - (8 if len(lines) == 2 else 0)
+                        fitting.append(
+                            (
+                                effective_size,
+                                len(lines),
+                                balance,
+                                max(widths),
+                                font,
+                                lines,
+                                bounds,
+                            )
+                        )
+            if fitting:
+                (
+                    _effective_size,
+                    _line_count,
+                    _balance,
+                    _width,
+                    font,
+                    lines,
+                    bounds,
+                ) = min(
+                    fitting,
+                    key=lambda layout: (-layout[0], layout[1], layout[2], layout[3]),
+                )
+                return font, list(lines), bounds
+        raise LocalRenderError("奇遇名称无法安全排入徽记。")
 
     def _draw_calendar(
         self,
@@ -1347,7 +1470,7 @@ class LocalImageRenderer:
             column = logical_column if row % 2 == 0 else 9 - logical_column
             left = MARGIN + round(column * cell_width)
             top = y + row * 108
-            centers.append((left + cell_width / 2, top + 41))
+            centers.append((left + cell_width / 2, top + 50))
             placements.append((node, left, top))
         if len(centers) > 1:
             draw.line(centers, fill="#cbbda7", width=5, joint="curve")
@@ -1360,24 +1483,24 @@ class LocalImageRenderer:
                 outline=BORDER,
                 width=1,
             )
-            avatar = self._load_asset(node.icon_asset, 42)
             center_x = left + (right - left) / 2
-            if avatar is not None:
-                image.paste(
-                    avatar,
-                    (round(center_x - avatar.width / 2), top + 15),
-                    avatar if avatar.mode == "RGBA" else None,
-                )
-            else:
-                draw.ellipse(
-                    (center_x - 20, top + 15, center_x + 20, top + 55),
-                    fill=TRACK,
-                    outline=JADE,
-                    width=2,
-                )
-            draw.text((left + 7, top + 6), str(node.index), font=self.map_index_font, fill=CINNABAR)
             lines = _wrap(draw, node.name, self.map_name_font, right - left - 8)[:2]
-            name_y = top + 60
+            index_text = str(node.index)
+            index_bounds = draw.textbbox((0, 0), index_text, font=self.map_index_font)
+            index_y = top + 21 - index_bounds[1]
+            index_width = draw.textlength(index_text, font=self.map_index_font)
+            draw.text(
+                (center_x - index_width / 2, index_y),
+                index_text,
+                font=self.map_index_font,
+                fill=CINNABAR,
+            )
+            name_line_height = 19
+            name_slot_top = top + 43
+            name_slot_height = name_line_height * 2
+            name_y = name_slot_top + (
+                name_slot_height - len(lines) * name_line_height
+            ) / 2
             for line in lines:
                 line_width = draw.textlength(line, font=self.map_name_font)
                 draw.text(
@@ -1386,7 +1509,7 @@ class LocalImageRenderer:
                     font=self.map_name_font,
                     fill=TEXT,
                 )
-                name_y += 19
+                name_y += name_line_height
         return y + rows * 108 + 24, False
 
     def _draw_table(

@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-jx3tools"
-version = "0.7.2"
+version = "0.7.3"
 description = "Query JX3API and render concise ink-wash result cards"
 requires-python = ">=3.12"
 dependencies = ["aiohttp>=3.11,<4", "Pillow>=12,<13"]

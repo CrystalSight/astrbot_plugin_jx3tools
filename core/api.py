@@ -85,7 +85,7 @@ class JX3ApiClient:
             connector=connector,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "astrbot-plugin-jx3tools/0.7.2",
+                "User-Agent": "astrbot-plugin-jx3tools/0.7.3",
             },
         )
 

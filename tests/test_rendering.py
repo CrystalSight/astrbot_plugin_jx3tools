@@ -302,11 +302,32 @@ def test_event_records_are_borderless_grids_and_drop_pet_adventures() -> None:
         "绝世奇遇",
     ]
     assert all(
-        group.items[0].icon_asset.startswith("adventures/")
+        group.items[0].badge_asset.startswith("adventure_badges/")
         for group in document.adventure_groups
     )
     assert "宠物奇遇" not in str(document)
     assert "不展示" not in str(document)
+
+
+def test_baizhan_nodes_do_not_reference_legacy_boss_assets() -> None:
+    document = build_document(
+        ENDPOINT_INDEX["百战"],
+        {
+            "start": 0,
+            "end": 1,
+            "list": [
+                {"index": 2, "name": "双行首领名称"},
+                {"index": 1, "name": "首领"},
+            ],
+        },
+        max_items=30,
+    )
+
+    assert [(node.index, node.name) for node in document.map_nodes] == [
+        (2, "双行首领名称"),
+        (1, "首领"),
+    ]
+    assert all(not hasattr(node, "icon_asset") for node in document.map_nodes)
 
 
 def test_arena_recent_gold_role_monster_and_trade_records_are_processed() -> None:

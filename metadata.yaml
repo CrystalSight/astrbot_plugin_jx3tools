@@ -2,7 +2,7 @@ name: astrbot_plugin_jx3tools
 display_name: "JX3Tools"
 short_desc: "剑网三查询、文章选择与移动端结果卡片"
 desc: "通过 JX3API 提供定制查询，并使用本地普惠体生成适合手机阅读的结果图片。"
-version: v0.7.2
+version: v0.7.3
 author: "CrystalSight"
 repo: "https://github.com/CrystalSight/astrbot_plugin_jx3tools"
 astrbot_version: ">=4.26.6,<5"

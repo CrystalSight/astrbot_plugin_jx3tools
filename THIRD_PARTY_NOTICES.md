@@ -43,9 +43,28 @@ in the public repository. This exclusion removes the asset-authorization block
 for the first source-code push; it does not grant permission to redistribute
 local copies.
 
+The former JX3BOX thumbnail synchronization script has been removed. Runtime
+rendering and current developer tooling do not read, transform, or download
+these legacy images. The ignore rules remain in place so copies retained in a
+maintainer's working tree cannot be committed accidentally.
+
 JX3Tools is not affiliated with or endorsed by JX3BOX, Kingsoft, Seasun, or the
 operators of JX3API. All third-party names, trademarks, and artwork remain the
 property of their respective owners.
+
+## Ma Shan Zheng (offline artwork tool; font not distributed)
+
+The project-owned adventure badge PNG files were typeset offline with Ma Shan
+Zheng. The font file is not included in this repository or loaded at runtime.
+
+- Copyright 2018 The MaShanZheng Project Authors
+- Source: <https://github.com/google/fonts/tree/main/ofl/mashanzheng>
+- License: SIL Open Font License 1.1
+
+The OFL permits using the font to create and distribute graphic artwork; the
+license requirement for the font software does not apply to images created with
+it. The shared ink-ring master and badge composition are newly created for this
+project and do not contain the excluded JX3BOX thumbnails.
 
 ## Alibaba PuHuiTi 3
 

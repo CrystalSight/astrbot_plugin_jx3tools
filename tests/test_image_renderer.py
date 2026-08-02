@@ -67,7 +67,130 @@ def test_missing_fixed_asset_uses_safe_fallback(tmp_path: Path) -> None:
     renderer.asset_directory = tmp_path / "assets"
     renderer._asset_cache = {}
 
-    assert renderer._load_asset("adventures/missing.png", 132) is None
+    assert renderer._load_asset("adventure_badges/missing.png", 156) is None
+
+
+def test_adventure_badge_fallback_handles_future_long_names(tmp_path: Path) -> None:
+    paths = _private_font_paths()
+    if paths is None or not paths.available:
+        pytest.skip("Private Alibaba PuHuiTi files are not present in this test runtime")
+    renderer = LocalImageRenderer(paths)
+    renderer.asset_directory = tmp_path / "assets"
+    renderer._asset_cache = {}
+    image = Image.new("RGB", (240, 196), image_renderer.BACKGROUND)
+    before = image.tobytes()
+
+    draw = ImageDraw.Draw(image)
+    font, lines, bounds = renderer._layout_adventure_badge_name(
+        draw,
+        "FutureAdventureName" * 20 + "\nExtraLine",
+    )
+
+    assert font in renderer.adventure_badge_fonts
+    assert font.size >= 16
+    assert 1 <= len(lines) <= 2
+    assert "".join(lines).endswith("…")
+    assert len("".join(lines)) <= 32
+    assert all(right - left <= 150 for left, _top, right, _bottom in bounds)
+    line_heights = [bottom - top for _left, top, _right, bottom in bounds]
+    assert sum(line_heights) + max(0, len(lines) - 1) * 2 <= 112
+    if len(bounds) == 2:
+        widths = [right - left for left, _top, right, _bottom in bounds]
+        assert abs(widths[0] - widths[1]) <= font.size
+
+    short_font, short_lines, _short_bounds = renderer._layout_adventure_badge_name(
+        draw,
+        "未来奇遇",
+    )
+    assert short_font.size >= 32
+    assert short_lines == ["未来奇遇"]
+
+    future_font, future_lines, _future_bounds = renderer._layout_adventure_badge_name(
+        draw,
+        "未来全新奇遇名称",
+    )
+    assert future_font.size >= 32
+    assert len(future_lines) == 2
+    assert "".join(future_lines) == "未来全新奇遇名称"
+
+    renderer._draw_adventure_badge_fallback(
+        draw,
+        image,
+        "FutureAdventureName" * 20 + "\nExtraLine",
+        120,
+        20,
+    )
+
+    assert image.tobytes() != before
+
+
+def test_baizhan_map_does_not_load_legacy_assets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _private_font_paths()
+    if paths is None or not paths.available:
+        pytest.skip("Private Alibaba PuHuiTi files are not present in this test runtime")
+    renderer = LocalImageRenderer(paths)
+    image = Image.new("RGB", (CANVAS_WIDTH, 260), image_renderer.BACKGROUND)
+
+    def fail_asset_load(_relative_name: str, _max_side: int) -> None:
+        raise AssertionError("Baizhan must not load a portrait asset")
+
+    monkeypatch.setattr(renderer, "_load_asset", fail_asset_load)
+    end_y, truncated = renderer._draw_snake_map(
+        ImageDraw.Draw(image),
+        image,
+        (MapNode(1, "首领"), MapNode(2, "双行首领名称")),
+        20,
+        250,
+    )
+
+    assert not truncated
+    assert end_y > 20
+
+
+def test_baizhan_map_uses_fixed_index_baseline_and_name_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _private_font_paths()
+    if paths is None or not paths.available:
+        pytest.skip("Private Alibaba PuHuiTi files are not present in this test runtime")
+    renderer = LocalImageRenderer(paths)
+    image = Image.new("RGB", (CANVAS_WIDTH, 260), image_renderer.BACKGROUND)
+    draw = ImageDraw.Draw(image)
+    original_text = ImageDraw.ImageDraw.text
+    index_positions: list[float] = []
+    name_positions: list[float] = []
+
+    def record_text(
+        target: ImageDraw.ImageDraw,
+        xy: tuple[float, float],
+        text: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        font = kwargs.get("font")
+        if font is renderer.map_index_font:
+            index_positions.append(float(xy[1]))
+        elif font is renderer.map_name_font:
+            name_positions.append(float(xy[1]))
+        original_text(target, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", record_text)
+    renderer._draw_snake_map(
+        draw,
+        image,
+        (MapNode(1, "单行"), MapNode(2, "双行首领名称")),
+        20,
+        250,
+    )
+
+    assert len(index_positions) == 2
+    assert index_positions[0] == index_positions[1]
+    assert len(name_positions) == 3
+    assert name_positions[0] == pytest.approx(
+        (name_positions[1] + name_positions[2]) / 2,
+    )
 
 
 def test_source_image_accepts_raster_and_rejects_unknown_bytes(
@@ -161,7 +284,7 @@ def test_specialized_calendar_table_line_and_snake_layouts_render_fully() -> Non
             ),
         ),
         map_nodes=tuple(
-            MapNode(index, "卫栖梧", fixed_asset_name("bosses", "卫栖梧"))
+            MapNode(index, "卫栖梧")
             for index in range(1, 21)
         ),
         tables=(
@@ -171,7 +294,7 @@ def test_specialized_calendar_table_line_and_snake_layouts_render_fully() -> Non
                 (
                     TableRow(
                         (TableCell("茶馆奇缘"), TableCell("2026-07-19 09:00:00")),
-                        fixed_asset_name("adventures", "茶馆奇缘"),
+                        fixed_asset_name("adventure_badges", "茶馆奇缘"),
                     ),
                 ),
                 (330, 294),
@@ -229,7 +352,7 @@ def test_feedback_grids_expand_and_hero_image_sits_below_accent() -> None:
                     AdventureItem(
                         "茶馆奇缘",
                         "2026-07-19 09:00:00",
-                        fixed_asset_name("adventures", "茶馆奇缘"),
+                        fixed_asset_name("adventure_badges", "茶馆奇缘"),
                     )
                     for _ in range(4)
                 ),

@@ -57,6 +57,8 @@ def test_runtime_dependencies_and_fonts_are_declared_safely() -> None:
 
     assert "Pillow>=12,<13" in requirements
     assert not list(PLUGIN_ROOT.rglob("*.ttf"))
+    assert not (PLUGIN_ROOT / "scripts" / "sync_fixed_assets.py").exists()
+    assert (PLUGIN_ROOT / "scripts" / "build_adventure_badges.py").is_file()
 
 
 def test_public_repository_identity_and_versions_are_consistent() -> None:
@@ -87,6 +89,7 @@ def test_public_repository_documents_and_exclusions_are_present() -> None:
     assert ("LICENSE " + "NOT SELECTED") not in license_text
     assert "assets/adventures" in notices
     assert "assets/bosses" in notices
+    assert "Ma Shan Zheng" in notices
     assert "not covered by the MIT License" in " ".join(notices.split())
     assert "仅供自用" not in readme
     assert "不准备公开发布" not in readme
