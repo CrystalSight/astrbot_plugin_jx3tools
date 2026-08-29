@@ -10,7 +10,8 @@ def test_defaults_are_safe() -> None:
     settings = PluginSettings.from_config({})
 
     assert settings.enabled
-    assert settings.api_base_url == "https://api.jx3api.com"
+    assert settings.api_base_url == "https://www.jx3api.com"
+    assert not settings.legacy_base_url_upgraded
     assert settings.token == ""
     assert settings.ticket == ""
     assert settings.max_response_bytes == 4_096 * 1_024
@@ -23,6 +24,15 @@ def test_legacy_member_switches_remain_backward_compatible() -> None:
     )
 
     assert not settings.tier_enabled[ServiceTier.MEMBER]
+
+
+def test_retired_default_base_url_is_upgraded_without_persisting_config() -> None:
+    settings = PluginSettings.from_config(
+        {"general": {"api_base_url": "https://api.jx3api.com/"}}
+    )
+
+    assert settings.api_base_url == "https://www.jx3api.com"
+    assert settings.legacy_base_url_upgraded
 
 
 def test_numeric_values_are_bounded() -> None:

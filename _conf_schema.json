@@ -12,8 +12,8 @@
       "api_base_url": {
         "type": "string",
         "description": "JX3API 基础地址",
-        "hint": "本版本默认使用兼容旧 Token 的备份服务；仅接受不含路径的 HTTPS 地址，聊天用户不能覆盖。",
-        "default": "https://api.jx3api.com"
+        "hint": "默认使用当前官方服务；仅接受不含路径的 HTTPS 地址，聊天用户不能覆盖。",
+        "default": "https://www.jx3api.com"
       },
       "default_server": {
         "type": "string",

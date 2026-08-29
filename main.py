@@ -36,7 +36,6 @@ from .presentation.image_renderer import (
     temporary_image_path,
 )
 from .presentation.rendering import (
-    build_article_document,
     build_document,
     card_identity,
     format_text,
@@ -94,6 +93,10 @@ class Jx3toolsPlugin(Star):
             return
         self._startup_error = ""
         self.settings = PluginSettings.from_config(self.config)
+        if self.settings.legacy_base_url_upgraded:
+            logger.warning(
+                "JX3Tools replaced the retired legacy API base URL with the current official service"
+            )
         self._rate_limiter = SessionRateLimiter(self.settings.requests_per_minute)
         self._render_semaphore = asyncio.Semaphore(1)
         await self._clear_pending_articles()
@@ -280,48 +283,32 @@ class Jx3toolsPlugin(Star):
         await self._finish_article_selection(session, pending)
         stop_event = getattr(event, "stop_event", None)
         try:
-            await event.send(
-                event.plain_result(
-                    f"已选择第 {index} 条，正在读取{pending.endpoint_name}正文……"
-                )
-            )
             client = self._client
-            renderer = self._renderer
             if client is None:
                 yield event.plain_result("文章客户端尚未就绪，请稍后再试。")
-                return
-            if renderer is None:
-                yield event.plain_result(
-                    "本地字体尚未就绪，无法生成正文图片，请管理员检查字体目录。"
-                )
-                return
-            try:
-                article = await client.fetch_article(
-                    pending.kind,
-                    pending.items[index - 1],
-                )
-                await event.send(event.plain_result("正文已获取，正在本地生成图片……"))
-                document = build_article_document(article)
-                async with self._render_semaphore:
-                    image_path = await _run_tracked_file_job(
-                        event,
-                        renderer.render,
-                        document,
-                    )
-            except JX3ApiError as exc:
-                yield event.plain_result(exc.user_message)
-                return
-            except LocalRenderError:
-                logger.warning("JX3Tools article image rendering failed")
-                yield event.plain_result("正文图片生成失败，请稍后重试。")
                 return
             selected_url = official_article_url(
                 pending.kind,
                 pending.items[index - 1],
             )
-            if selected_url:
-                await event.send(event.plain_result(selected_url))
-            yield event.image_result(image_path)
+            if not selected_url:
+                yield event.plain_result("接口未返回可用的剑网 3 官网链接，请稍后重试。")
+                return
+            try:
+                saohua_data = await client.request(
+                    ENDPOINT_INDEX["saohua.random"],
+                    {},
+                )
+                saohua = format_text(
+                    ENDPOINT_INDEX["saohua.random"],
+                    saohua_data,
+                    max_items=self.settings.max_items,
+                ).strip()
+            except JX3ApiError:
+                saohua = ""
+            if not saohua or saohua == "-":
+                saohua = "骚话暂时走丢了。"
+            yield event.plain_result(f"{selected_url}\n\n{saohua}")
         finally:
             if callable(stop_event):
                 stop_event()
@@ -487,7 +474,11 @@ class Jx3toolsPlugin(Star):
         )
         lines = [f"【{endpoint.name}】"]
         for index, item in enumerate(items, start=1):
-            title = " ".join(str(item.get("title", "未命名")).split())[:100]
+            nested = item.get("desc")
+            details = nested if isinstance(nested, Mapping) else {}
+            title = " ".join(
+                str(item.get("title", details.get("title", "未命名"))).split()
+            )[:100]
             date = " ".join(
                 str(item.get("date", item.get("time", ""))).split()
             )[:32]

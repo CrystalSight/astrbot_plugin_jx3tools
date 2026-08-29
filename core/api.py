@@ -20,10 +20,11 @@ ALLOWED_IMAGE_DOMAINS = (
     "jx3.xoyo.com",
     "jx3box.com",
     "j3pz.com",
-    "nico.nicemoe.cn",
 )
-LEGACY_PRIMARY_HOST = "www.jx3api.com"
-LEGACY_BACKUP_HOST = "api.jx3api.com"
+ALLOWED_IMAGE_HOSTS = (
+    "nico.nicemoe.cn",
+    "static.nicemoe.cn",
+)
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 FIXED_ENDPOINT_PATHS = frozenset(endpoint.path for endpoint in ENDPOINTS)
 
@@ -85,7 +86,7 @@ class JX3ApiClient:
             connector=connector,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "astrbot-plugin-jx3tools/0.7.3",
+                "User-Agent": "astrbot-plugin-jx3tools/0.8.0",
             },
         )
 
@@ -101,7 +102,7 @@ class JX3ApiClient:
         endpoint: EndpointSpec,
         parameters: dict[str, str | int],
     ) -> Any:
-        """POST one whitelisted legacy query and return its validated data field."""
+        """POST one whitelisted current query and return its validated data field."""
         if not _is_fixed_endpoint_path(endpoint.path):
             raise JX3ApiConfigurationError("插件接口注册表包含无效路径。")
         if not self.started:
@@ -173,12 +174,16 @@ class JX3ApiClient:
         """Fetch one selected article body from an approved official URL."""
         if not self.started:
             raise JX3ApiError("文章客户端尚未就绪，请稍后再试。")
-        title = _bounded_text(item.get("title"), 200)
+        nested = item.get("desc")
+        details = nested if isinstance(nested, Mapping) else {}
+        title = _bounded_text(item.get("title", details.get("title")), 200)
         date = _bounded_text(item.get("date", item.get("time", "")), 40)
-        content = ""
+        content = details.get("content", "")
+        if not isinstance(content, str):
+            content = ""
 
         params = _article_api_params(kind, item)
-        if params:
+        if not content and params:
             content = await self._fetch_article_api(params)
 
         if not content:
@@ -229,7 +234,6 @@ class JX3ApiClient:
 
     async def fetch_image(self, url: str) -> bytes:
         """Download one bounded raster image with retries from a trusted domain."""
-        url = self._normalize_legacy_media_url(url)
         if not _is_allowed_image_url(url):
             raise JX3ApiError("接口返回了不受信任的图片地址，已停止下载。")
         if not self.started:
@@ -238,7 +242,6 @@ class JX3ApiClient:
 
     async def fetch_media_image(self, url: str) -> bytes:
         """Download a user-requested card with a media-specific timeout and retries."""
-        url = self._normalize_legacy_media_url(url)
         if not _is_allowed_image_url(url):
             raise JX3ApiError("接口返回了不受信任的图片地址，已停止下载。")
         if not self.started:
@@ -250,24 +253,6 @@ class JX3ApiClient:
             url,
             request_timeout=timeout,
         )
-
-    def _normalize_legacy_media_url(self, url: str) -> str:
-        """Route stale primary-host media URLs through the selected legacy backup."""
-        parsed = urlsplit(url)
-        try:
-            port = parsed.port
-        except ValueError:
-            return url
-        if (
-            self.base_url == f"https://{LEGACY_BACKUP_HOST}"
-            and parsed.scheme == "https"
-            and parsed.hostname == LEGACY_PRIMARY_HOST
-            and parsed.username is None
-            and parsed.password is None
-            and port in {None, 443}
-        ):
-            return parsed._replace(netloc=LEGACY_BACKUP_HOST).geturl()
-        return url
 
     async def _fetch_image_with_retries(
         self,
@@ -327,7 +312,9 @@ class JX3ApiClient:
         if response.status == 429:
             raise JX3ApiError("JX3API 请求过于频繁，请稍后再试。")
         if response.status in {401, 403}:
-            raise JX3ApiError("JX3API 鉴权失败，请管理员检查 Token/Ticket 权限。")
+            raise JX3ApiError(
+                "JX3API 鉴权失败，请管理员检查换新后的 Token/Ticket 权限。"
+            )
         if response.status >= 500:
             raise _RetryableJX3ApiError("JX3API 服务暂时不可用，请稍后重试。")
         if response.status < 200 or response.status >= 300:
@@ -357,8 +344,16 @@ class JX3ApiClient:
                 and "暂无数据" in message
             ):
                 return {}
+            if (
+                endpoint.key == "role.monster"
+                and code == 404
+                and "未收录" in message
+            ):
+                return {}
             if code in {401, 403}:
-                raise JX3ApiError("JX3API 鉴权失败，请管理员检查 Token/Ticket 权限。")
+                raise JX3ApiError(
+                    "JX3API 鉴权失败，请管理员检查换新后的 Token/Ticket 权限。"
+                )
             detail = f"：{message}" if message else ""
             raise JX3ApiError(f"JX3API 查询失败（{code!s}）{detail}。")
         return document.get("data")
@@ -425,17 +420,26 @@ def _is_allowed_article_url(url: str) -> bool:
 
 
 def official_article_url(kind: str, item: Mapping[str, Any]) -> str:
-    """Return a canonical public URL only for a selected rework article."""
-    if kind != "rework":
-        return ""
+    """Return the canonical public URL for a selected official article."""
     raw_url = item.get("url")
     if not isinstance(raw_url, str) or len(raw_url) > 2_048:
         return ""
     parsed = urlsplit(raw_url)
-    if parsed.path != "/announce/gg.html" or parsed.fragment:
+    if not _is_allowed_article_url(raw_url) or parsed.fragment:
         return ""
     params = _article_api_params(kind, item)
     if params is None:
+        return ""
+    if params.get("action") == "get_article_detail":
+        catid = params.get("catid", "")
+        identifier = params.get("id", "")
+        if not catid or not identifier:
+            return ""
+        return (
+            f"https://{ALLOWED_ARTICLE_HOST}/"
+            f"show-{catid}-{identifier}-1.html"
+        )
+    if parsed.path != "/announce/gg.html":
         return ""
     identifier = params.get("kid", "")
     if not identifier:
@@ -446,7 +450,7 @@ def official_article_url(kind: str, item: Mapping[str, Any]) -> str:
 def _is_allowed_image_url(url: str) -> bool:
     parsed = urlsplit(url)
     hostname = parsed.hostname or ""
-    allowed = any(
+    allowed = hostname in ALLOWED_IMAGE_HOSTS or any(
         hostname == domain or hostname.endswith(f".{domain}")
         for domain in ALLOWED_IMAGE_DOMAINS
     )

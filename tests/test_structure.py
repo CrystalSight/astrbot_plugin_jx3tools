@@ -48,6 +48,9 @@ def test_configuration_is_grouped() -> None:
         "presentation",
     }
     assert all(group["type"] == "object" for group in schema.values())
+    assert schema["general"]["items"]["api_base_url"]["default"] == (
+        "https://www.jx3api.com"
+    )
     assert schema["credentials"]["items"]["token"]["default"] == ""
     assert "member_enabled" in schema["features"]["items"]
 

@@ -8,6 +8,9 @@ from typing import Any
 
 from .endpoints import ServiceTier
 
+CURRENT_API_BASE_URL = "https://www.jx3api.com"
+LEGACY_API_BASE_URL = "https://api.jx3api.com"
+
 
 @dataclass(frozen=True, slots=True)
 class PluginSettings:
@@ -15,6 +18,7 @@ class PluginSettings:
 
     enabled: bool
     api_base_url: str
+    legacy_base_url_upgraded: bool
     default_server: str
     token: str
     ticket: str
@@ -44,13 +48,20 @@ class PluginSettings:
             "vip2_enabled",
             True,
         )
+        configured_base_url = _string(
+            general,
+            "api_base_url",
+            CURRENT_API_BASE_URL,
+        ).rstrip("/")
+        legacy_base_url_upgraded = configured_base_url == LEGACY_API_BASE_URL
+        api_base_url = (
+            CURRENT_API_BASE_URL if legacy_base_url_upgraded else configured_base_url
+        )
+
         return cls(
             enabled=_boolean(general, "enabled", True),
-            api_base_url=_string(
-                general,
-                "api_base_url",
-                "https://api.jx3api.com",
-            ).rstrip("/"),
+            api_base_url=api_base_url,
+            legacy_base_url_upgraded=legacy_base_url_upgraded,
             default_server=_string(general, "default_server", ""),
             token=_string(credentials, "token", ""),
             ticket=_string(credentials, "ticket", ""),

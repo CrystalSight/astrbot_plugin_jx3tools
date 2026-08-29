@@ -96,7 +96,7 @@ def make_client(
     max_response_bytes: int = 2_048,
 ) -> JX3ApiClient:
     client = JX3ApiClient(
-        base_url="https://api.jx3api.com",
+        base_url="https://www.jx3api.com",
         token="member-token",
         ticket="push-ticket",
         timeout_seconds=10,
@@ -139,6 +139,28 @@ async def test_credentials_are_scoped_to_endpoint_requirements() -> None:
     assert member_call["json"]["ticket"] == "push-ticket"
 
 
+async def test_current_news_inline_content_avoids_secondary_request() -> None:
+    client = make_client(FakeSession(FakeRequestContext()))
+
+    article = await client.fetch_article(
+        "news",
+        {
+            "date": "2026-08-28",
+            "desc": {
+                "title": "新版资讯标题",
+                "content": "新版接口已直接返回正文。",
+                "url": "https://jx3.xoyo.com/show-1-2-1.html",
+            },
+        },
+    )
+
+    assert article == {
+        "title": "新版资讯标题",
+        "date": "2026-08-28",
+        "content": "新版接口已直接返回正文。",
+    }
+
+
 @pytest.mark.parametrize("endpoint_name", ("card.random", "mech.calculator"))
 async def test_current_member_endpoints_receive_only_their_required_token(
     endpoint_name: str,
@@ -159,7 +181,7 @@ async def test_current_member_endpoints_receive_only_their_required_token(
 
 
 @pytest.mark.parametrize("method_name", ("fetch_image", "fetch_media_image"))
-async def test_legacy_backup_rewrites_stale_primary_media_host(
+async def test_current_service_preserves_trusted_media_url(
     monkeypatch,
     method_name: str,
 ) -> None:
@@ -181,12 +203,10 @@ async def test_legacy_backup_rewrites_stale_primary_media_host(
     )
 
     assert result == b"image"
-    assert captured_urls == [
-        "https://api.jx3api.com/upload/card.png?size=large"
-    ]
+    assert captured_urls == ["https://www.jx3api.com/upload/card.png?size=large"]
 
 
-async def test_custom_base_does_not_rewrite_primary_media_host(monkeypatch) -> None:
+async def test_custom_base_preserves_trusted_media_url(monkeypatch) -> None:
     client = make_client(FakeSession(FakeRequestContext()))
     client.base_url = "https://mirror.example"
     captured_urls: list[str] = []
@@ -304,7 +324,7 @@ async def test_business_auth_errors_do_not_relay_upstream_messages(code: int) ->
         await client.request(ENDPOINT_INDEX["trade.demon"], {})
 
     assert captured.value.user_message == (
-        "JX3API 鉴权失败，请管理员检查 Token/Ticket 权限。"
+        "JX3API 鉴权失败，请管理员检查换新后的 Token/Ticket 权限。"
     )
 
 
@@ -319,6 +339,21 @@ async def test_chitu_business_no_data_is_normalized_to_empty_mapping(
     client = make_client(FakeSession(FakeRequestContext(response)))
 
     data = await client.request(ENDPOINT_INDEX[endpoint_name], {})
+
+    assert data == {}
+
+
+async def test_role_monster_not_recorded_is_normalized_to_empty_mapping() -> None:
+    response = FakeResponse(
+        200,
+        {"code": 404, "msg": "未收录", "data": None},
+    )
+    client = make_client(FakeSession(FakeRequestContext(response)))
+
+    data = await client.request(
+        ENDPOINT_INDEX["role.monster"],
+        {"server": "梦江南", "name": "侠士"},
+    )
 
     assert data == {}
 
@@ -399,29 +434,55 @@ def test_article_api_parameters_are_parsed_from_official_urls() -> None:
     ) is None
 
 
-def test_only_selected_rework_gets_a_canonical_public_article_url() -> None:
-    selected = {
+def test_selected_articles_get_canonical_public_urls() -> None:
+    announce = {
         "url": "https://jx3.xoyo.com/announce/gg.html?id=1335648&from=list"
     }
+    news = {"url": "https://jx3.xoyo.com/show-2458-7389-7.html"}
 
-    assert official_article_url("rework", selected) == (
+    assert official_article_url("rework", announce) == (
         "https://jx3.xoyo.com/announce/gg.html?id=1335648"
     )
-    assert official_article_url("news", selected) == ""
+    assert official_article_url("announce", announce) == (
+        "https://jx3.xoyo.com/announce/gg.html?id=1335648"
+    )
+    assert official_article_url("news", announce) == (
+        "https://jx3.xoyo.com/announce/gg.html?id=1335648"
+    )
+    assert official_article_url("news", news) == (
+        "https://jx3.xoyo.com/show-2458-7389-1.html"
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "url"),
+    (
+        ("rework", "https://evil.example/announce/gg.html?id=1335648"),
+        ("rework", "http://jx3.xoyo.com/announce/gg.html?id=1335648"),
+        ("rework", "https://user@jx3.xoyo.com/announce/gg.html?id=1335648"),
+        ("rework", "https://jx3.xoyo.com:444/announce/gg.html?id=1335648"),
+        ("rework", "https://jx3.xoyo.com/other.html?id=1335648"),
+        ("rework", "https://jx3.xoyo.com/announce/gg.html?id=1335648#body"),
+        ("news", "https://jx3.xoyo.com/show-2458-x-1.html"),
+    ),
+)
+def test_canonical_public_article_url_rejects_untrusted_shapes(
+    kind: str,
+    url: str,
+) -> None:
     assert official_article_url(
-        "rework",
-        {"url": "https://evil.example/announce/gg.html?id=1335648"},
-    ) == ""
-    assert official_article_url(
-        "rework",
-        {"url": "https://jx3.xoyo.com/other.html?id=1335648"},
+        kind,
+        {"url": url},
     ) == ""
 
 
 def test_official_item_icon_host_is_allowed_without_broadening_http() -> None:
     assert _is_allowed_image_url("https://nico.nicemoe.cn/item.png")
+    assert _is_allowed_image_url("https://static.nicemoe.cn/card.png")
     assert not _is_allowed_image_url("http://nico.nicemoe.cn/item.png")
+    assert not _is_allowed_image_url("http://static.nicemoe.cn/card.png")
     assert not _is_allowed_image_url("https://nicemoe.cn/item.png")
+    assert not _is_allowed_image_url("https://evil.static.nicemoe.cn/card.png")
 
 
 async def test_item_image_retries_a_transient_broken_payload(monkeypatch) -> None:

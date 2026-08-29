@@ -31,9 +31,12 @@ def test_daily_fields_follow_feedback_mapping() -> None:
             "school": "门派事件",
             "rescue": "不应展示",
             "draw": "美人图",
-            "luck": ["宠物一", "宠物二"],
+            "lucky": ["宠物一", "宠物二"],
             "card": ["周常一", "周常二"],
-            "team": [["公共一", "公共二"], ["大周常一"]],
+            "weekly": {
+                "conn": ["公共一", "公共二"],
+                "raid": ["大周常一"],
+            },
         },
         max_items=30,
     )
@@ -197,7 +200,7 @@ def test_monthly_calendar_is_sunday_first_and_only_keeps_war_battle() -> None:
         ENDPOINT_INDEX["月历"],
         {
             "today": {"date": "2026-07-19"},
-            "data": [
+            "total": [
                 {
                     "date": "2026-07-19",
                     "week": "星期日",
@@ -371,6 +374,12 @@ def test_arena_recent_gold_role_monster_and_trade_records_are_processed() -> Non
         max_items=30,
     )
     assert set(_rows(role_monster)) == {"区服", "角色", "体力", "精力", "技能数量"}
+    empty_role_monster = build_document(
+        ENDPOINT_INDEX["角色百战"],
+        {},
+        max_items=30,
+    )
+    assert empty_role_monster.subtitle == "该角色暂无百战记录"
 
     trade = build_document(
         ENDPOINT_INDEX["物价"],
@@ -422,12 +431,67 @@ def test_item_search_names_filter_urls_and_enforce_character_limit() -> None:
     assert names.endswith("……名称列表已截断")
 
 
-def test_mech_and_chitu_empty_results_are_copyable_text() -> None:
+def test_mech_current_fields_and_legacy_alias_are_copyable_text() -> None:
     mech = format_text(
         ENDPOINT_INDEX["解密"],
-        {"now_node": "乾", "now_result": "一三五", "next_node": "坤", "next_result": "二四六", "cdtn": "不展示"},
+        {
+            "nowTime": "23:02:28",
+            "nowNode": "23:00:00",
+            "nowResult": "北 5，南 0，西 1，东 9",
+            "nextNode": "23:15:00",
+            "nextResult": "北 6，南 0，西 1，东 9",
+            "intervalTime": "00:12:32",
+        },
         max_items=30,
     )
-    assert mech == "【解密】\n当前：乾：一三五\n下一时段：坤：二四六"
+    assert mech == (
+        "【秘境方位】\n"
+        "当前：23:00:00：北 5，南 0，西 1，东 9\n"
+        "下一时段：23:15:00：北 6，南 0，西 1，东 9"
+    )
+    legacy = format_text(
+        ENDPOINT_INDEX["副本解密"],
+        {
+            "now_node": "乾",
+            "now_result": "一三五",
+            "next_node": "坤",
+            "next_result": "二四六",
+        },
+        max_items=30,
+    )
+    assert legacy == "【秘境方位】\n当前：乾：一三五\n下一时段：坤：二四六"
+    assert format_text(
+        ENDPOINT_INDEX["秘境方位"],
+        {},
+        max_items=30,
+    ) == "【秘境方位】\n当前：-\n下一时段：-"
+
+
+def test_chitu_empty_and_internal_send_field_are_hidden() -> None:
     assert format_text(ENDPOINT_INDEX["今日赤兔"], {}, max_items=30) == "今日暂无赤兔记录。"
     assert format_text(ENDPOINT_INDEX["本周赤兔"], {}, max_items=30) == "本周暂无赤兔记录。"
+    document = build_document(
+        ENDPOINT_INDEX["今日赤兔"],
+        [
+            {
+                "server": "天鹅坪",
+                "mapName": "鲲鹏岛",
+                "horse": "赤兔",
+                "date": "2026-08-28 23:00:00",
+                "send": True,
+            }
+        ],
+        max_items=30,
+    )
+    rendered = str(document)
+    assert "send" not in rendered
+    assert "True" not in rendered
+    assert "天鹅坪" in rendered
+    assert "鲲鹏岛" in rendered
+    assert "赤兔" in rendered
+    assert any(
+        row.label == "地图" and row.value == "鲲鹏岛"
+        for section in document.sections
+        for card in section.cards
+        for row in card.rows
+    )

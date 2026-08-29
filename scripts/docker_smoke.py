@@ -21,13 +21,11 @@ from ..presentation.image_renderer import (
 )
 from ..presentation.rendering import (
     RenderDocument,
-    build_article_document,
     build_document,
     card_identity,
+    format_text,
     item_search_names,
 )
-
-LEGACY_BACKUP_BASE_URL = "https://api.jx3api.com"
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,12 +51,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--articles-only",
         action="store_true",
-        help="Run only article list, body, and event-chain checks.",
+        help="Run only article list and URL-plus-saying event-chain checks.",
     )
     parser.add_argument(
-        "--legacy-backup",
+        "--free-only",
         action="store_true",
-        help="Use the fixed legacy JX3API backup without changing saved config.",
+        help="Run all retained endpoints that do not require member credentials.",
     )
     parser.add_argument(
         "--arena-only",
@@ -145,9 +143,7 @@ async def run() -> int:
     document = json.loads(config_text)
     settings = PluginSettings.from_config(document)
     client = JX3ApiClient(
-        base_url=(
-            LEGACY_BACKUP_BASE_URL if args.legacy_backup else settings.api_base_url
-        ),
+        base_url=settings.api_base_url,
         token=settings.token,
         ticket=settings.ticket,
         timeout_seconds=settings.timeout_seconds,
@@ -177,7 +173,9 @@ async def run() -> int:
         try:
             data = await client.request(endpoint, payload)
         except JX3ApiError as exc:
-            if allow_no_data and ("暂无" in exc.user_message or "400" in exc.user_message):
+            if allow_no_data and any(
+                marker in exc.user_message for marker in ("暂无", "未收录", "400")
+            ):
                 results.append({"key": key, "status": "PASS", "detail": "no data"})
                 return endpoint, None
             results.append({"key": key, "status": "FAIL", "detail": exc.user_message})
@@ -202,6 +200,30 @@ async def run() -> int:
             failures += 1
             results.append(
                 {"key": f"render:{endpoint.key}", "status": "FAIL", "detail": type(exc).__name__}
+            )
+
+    def check_text(endpoint: EndpointSpec, data: Any) -> None:
+        """Ensure a retained plain-text endpoint produces a bounded reply."""
+        nonlocal failures
+        try:
+            output = format_text(endpoint, data, max_items=30).strip()
+            if not output or len(output) > 4_000:
+                raise ValueError("invalid text output")
+            results.append(
+                {
+                    "key": f"text:{endpoint.key}",
+                    "status": "PASS",
+                    "detail": f"chars:{len(output)}",
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - smoke report only
+            failures += 1
+            results.append(
+                {
+                    "key": f"text:{endpoint.key}",
+                    "status": "FAIL",
+                    "detail": type(exc).__name__,
+                }
             )
 
     def diagnose_tianluo_foods(endpoint: EndpointSpec, data: Any) -> None:
@@ -247,13 +269,38 @@ async def run() -> int:
     async def collect_results(source: Any) -> list[Any]:
         return [result async for result in source]
 
-    async def fetch_optional_icon(key: str, url: str) -> bytes | None:
+    async def fetch_optional_icon(
+        key: str,
+        url: str,
+        *,
+        require_current_media: bool = False,
+    ) -> bytes | None:
         """Mirror runtime fallback when an optional upstream icon is unusable."""
         if not url:
             return None
         try:
-            return await client.fetch_image(url)
-        except JX3ApiError:
+            image = await client.fetch_image(url)
+            if require_current_media:
+                results.append(
+                    {
+                        "key": f"media:{key}",
+                        "status": "PASS",
+                        "detail": f"bytes:{len(image)}",
+                    }
+                )
+            return image
+        except JX3ApiError as exc:
+            if require_current_media:
+                nonlocal failures
+                failures += 1
+                results.append(
+                    {
+                        "key": f"media:{key}",
+                        "status": "FAIL",
+                        "detail": exc.user_message,
+                    }
+                )
+                return None
             results.append(
                 {
                     "key": f"optional-icon:{key}",
@@ -308,8 +355,106 @@ async def run() -> int:
         record_icon = await fetch_optional_icon(
             records_endpoint.key,
             record_document.icon_url,
+            require_current_media=bool(record_document.icon_url),
         )
         render(records_endpoint, records, record_icon)
+
+    async def check_role_chain(card: Any) -> None:
+        """Exercise retained role endpoints with an identity returned by the API."""
+        nonlocal failures
+        if not isinstance(card, Mapping):
+            server = ""
+            role = ""
+        else:
+            server = str(card.get("serverName", card.get("server", ""))).strip()
+            role = str(card.get("roleName", card.get("name", ""))).strip()
+        if not server or not role:
+            failures += 1
+            results.append(
+                {
+                    "key": "identity:card.random",
+                    "status": "FAIL",
+                    "detail": "server or role missing",
+                }
+            )
+            return
+        parameters: dict[str, str | int] = {"server": server, "name": role}
+        for key in (
+            "role.detail",
+            "event.records",
+            "card.record",
+            "role.monster",
+        ):
+            endpoint, data = await query(key, parameters, allow_no_data=True)
+            if data is None:
+                continue
+            if endpoint.output == "card":
+                _card_server, _card_role, image_url = card_identity(data)
+                if not image_url:
+                    failures += 1
+                    results.append(
+                        {
+                            "key": f"media:{key}",
+                            "status": "FAIL",
+                            "detail": "image URL missing",
+                        }
+                    )
+                    continue
+                image = await client.fetch_media_image(image_url)
+                output = Path(renderer.save_source_image(image))
+                await asyncio.to_thread(output.unlink, missing_ok=True)
+                results.append(
+                    {
+                        "key": f"media:{key}",
+                        "status": "PASS",
+                        "detail": f"bytes:{len(image)}",
+                    }
+                )
+            else:
+                render(endpoint, data)
+
+        arena_endpoint, arena = await query(
+            "arena.recent",
+            {**parameters, "mode": 33},
+            allow_no_data=True,
+        )
+        if arena is not None:
+            arena_document = build_document(arena_endpoint, arena, max_items=30)
+            render(arena_endpoint, arena)
+            wrapper = ArenaSmokeRenderer(renderer)
+            plugin = Jx3toolsPlugin(context=object(), config=document)
+            plugin._client = client
+            plugin._renderer = wrapper  # type: ignore[assignment]
+            plugin._initialized = True
+            event = SmokeEvent(f"/jx3 名剑战绩 {server} {role} 33")
+            responses = [result async for result in plugin.jx3(event)]
+            output = Path(responses[0]) if len(responses) == 1 else None
+            exists = output is not None and await asyncio.to_thread(output.is_file)
+            profile_layout = (
+                bool(arena_document.sections)
+                and len(arena_document.sections[0].cards) == 1
+            )
+            passed = bool(exists and wrapper.profile_bytes > 0)
+            if output is not None:
+                await asyncio.to_thread(output.unlink, missing_ok=True)
+            if profile_layout and not passed:
+                failures += 1
+            results.append(
+                {
+                    "key": "event:arena.recent",
+                    "status": (
+                        "PASS"
+                        if passed
+                        else "FAIL"
+                        if profile_layout
+                        else "SKIP"
+                    ),
+                    "detail": (
+                        f"profile:{wrapper.profile_bytes} bytes; "
+                        f"profile-layout:{profile_layout}"
+                    ),
+                }
+            )
 
     await client.start()
     if args.arena_only:
@@ -380,12 +525,42 @@ async def run() -> int:
         return 1 if failures else 0
     try:
         if not args.articles_only:
+            daily_endpoint, daily = await query("active.calendar", {"num": 0})
+            if daily is not None:
+                render(daily_endpoint, daily)
+
             monthly_endpoint, monthly = await query("active.list_calendar")
             if monthly is not None:
                 render(monthly_endpoint, monthly)
 
-            await query("active.celebs", {"name": "觅宝会"})
-            await query("exam.search", {"subject": "DXTGQYJGX", "limit": 3})
+            celebs_endpoint, celebs = await query(
+                "active.celebs",
+                {"name": "觅宝会"},
+            )
+            if celebs is not None:
+                render(celebs_endpoint, celebs)
+
+            exam_endpoint, exam = await query(
+                "exam.search",
+                {"subject": "DXTGQYJGX", "limit": 3},
+            )
+            if exam is not None:
+                render(exam_endpoint, exam)
+            if settings.default_server:
+                status_endpoint, status = await query(
+                    "status.check",
+                    {"server": settings.default_server},
+                )
+                if status is not None:
+                    check_text(status_endpoint, status)
+            else:
+                results.append(
+                    {
+                        "key": "status.check",
+                        "status": "SKIP",
+                        "detail": "default server missing",
+                    }
+                )
 
             foods_endpoint, foods = await query("school.foods")
             if foods is not None:
@@ -403,19 +578,6 @@ async def run() -> int:
                 (str, bytes, bytearray),
             ):
                 article_items[article_key] = items
-            if isinstance(items, Sequence) and items and isinstance(items[0], Mapping):
-                try:
-                    article = await client.fetch_article(endpoint.article_kind, items[0])
-                    output = Path(renderer.render(build_article_document(article)))
-                    await asyncio.to_thread(output.unlink, missing_ok=True)
-                    results.append(
-                        {"key": f"article:{article_key}", "status": "PASS", "detail": "body png"}
-                    )
-                except Exception as exc:  # noqa: BLE001 - smoke report only
-                    failures += 1
-                    results.append(
-                        {"key": f"article:{article_key}", "status": "FAIL", "detail": type(exc).__name__}
-                    )
 
         article_commands = {
             "news.allnews": "/jx3 新闻 1",
@@ -441,35 +603,30 @@ async def run() -> int:
                     async for result in plugin.article_selection(selection_event)
                 ]
                 tail_results = await command_tail
-                image_path = Path(selection_results[-1])
-                image_exists = await asyncio.to_thread(image_path.is_file)
-                sent_urls = [
-                    value
-                    for value in selection_event.sent
-                    if isinstance(value, str) and value.startswith("https://")
-                ]
-                is_rework = article_key == "skill.rework"
+                selection_text = (
+                    selection_results[0]
+                    if len(selection_results) == 1
+                    and isinstance(selection_results[0], str)
+                    else ""
+                )
+                parts = selection_text.split("\n\n", 1)
                 passed = (
                     "10 秒内" in start_message
                     and len(selection_results) == 1
-                    and len(selection_event.sent) == (3 if is_rework else 2)
-                    and len(sent_urls) == (1 if is_rework else 0)
-                    and (
-                        not is_rework
-                        or sent_urls[0].startswith(
-                            "https://jx3.xoyo.com/announce/gg.html?id="
-                        )
-                    )
-                    and image_exists
+                    and len(parts) == 2
+                    and selection_text.count("\n\n") == 1
+                    and parts[0].startswith("https://jx3.xoyo.com/")
+                    and bool(parts[1].strip())
+                    and not selection_event.sent
+                    and not selection_event.tracked
                     and selection_event.stopped
                     and not tail_results
                 )
-                await asyncio.to_thread(image_path.unlink, missing_ok=True)
                 results.append(
                     {
                         "key": f"event:{article_key}",
                         "status": "PASS" if passed else "FAIL",
-                        "detail": "no false timeout; approved URL policy and body png",
+                        "detail": "one approved URL-plus-saying text result",
                     }
                 )
                 if not passed:
@@ -498,6 +655,20 @@ async def run() -> int:
             )
             return 1 if failures else 0
 
+        for key in ("saohua.random", "saohua.content"):
+            saohua_endpoint, saohua = await query(key)
+            if saohua is not None:
+                check_text(saohua_endpoint, saohua)
+
+        if args.free_only:
+            print(
+                json.dumps(
+                    {"failures": failures, "results": results},
+                    ensure_ascii=False,
+                )
+            )
+            return 1 if failures else 0
+
         gold_parameters: dict[str, str | int] = {}
         if settings.default_server:
             gold_parameters["server"] = settings.default_server
@@ -509,9 +680,40 @@ async def run() -> int:
         if monster is not None:
             render(monster_endpoint, monster)
 
+        matrix_endpoint, matrix = await query(
+            "school.matrix",
+            {"name": "太虚剑意"},
+        )
+        if matrix is not None:
+            render(matrix_endpoint, matrix)
+
+        smite_endpoint, smite = await query("smite.records")
+        if smite is not None:
+            render(smite_endpoint, smite)
+
+        if settings.default_server:
+            ranch_endpoint, ranch = await query(
+                "ranch.records",
+                {"server": settings.default_server},
+                allow_no_data=True,
+            )
+            if ranch is not None:
+                render(ranch_endpoint, ranch)
+        else:
+            results.append(
+                {
+                    "key": "ranch.records",
+                    "status": "SKIP",
+                    "detail": "default server missing",
+                }
+            )
+
         await check_trade()
 
-        card_endpoint, card = await query("card.random")
+        card_endpoint, card = await query(
+            "card.random",
+            {"server": settings.default_server} if settings.default_server else {},
+        )
         if card is not None:
             _server, _role, image_url = card_identity(card)
             image = await client.fetch_media_image(image_url)
@@ -520,10 +722,43 @@ async def run() -> int:
             results.append(
                 {"key": f"media:{card_endpoint.key}", "status": "PASS", "detail": f"bytes:{len(image)}"}
             )
+            await check_role_chain(card)
 
-        await query("mech.calculator")
-        await query("chitu.records", allow_no_data=True)
-        await query("chitu.week_records", allow_no_data=True)
+        mech_endpoint, mech = await query("mech.calculator")
+        if mech is not None:
+            mech_text = format_text(mech_endpoint, mech, max_items=30)
+            expected = (
+                isinstance(mech, Mapping)
+                and str(mech.get("nowNode", "")) in mech_text
+                and str(mech.get("nowResult", "")) in mech_text
+                and str(mech.get("nextNode", "")) in mech_text
+                and str(mech.get("nextResult", "")) in mech_text
+                and "当前：-" not in mech_text
+                and "下一时段：-" not in mech_text
+            )
+            if not expected:
+                failures += 1
+            results.append(
+                {
+                    "key": "text:mech.calculator",
+                    "status": "PASS" if expected else "FAIL",
+                    "detail": f"chars:{len(mech_text)}",
+                }
+            )
+        for key in ("chitu.records", "chitu.week_records"):
+            chitu_endpoint, chitu = await query(key, allow_no_data=True)
+            if chitu is not None:
+                chitu_document = build_document(chitu_endpoint, chitu, max_items=30)
+                if "send" in str(chitu_document):
+                    failures += 1
+                    results.append(
+                        {
+                            "key": f"fields:{key}",
+                            "status": "FAIL",
+                            "detail": "internal send field exposed",
+                        }
+                    )
+                render(chitu_endpoint, chitu)
     finally:
         await client.close()
     print(json.dumps({"failures": failures, "results": results}, ensure_ascii=False))

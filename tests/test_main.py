@@ -67,6 +67,7 @@ class FakeClient:
     def __init__(self, data: Any) -> None:
         self.data = data
         self.calls: list[tuple[Any, dict[str, str | int]]] = []
+        self.image_calls: list[str] = []
         self.media_calls: list[str] = []
         self.closed = False
 
@@ -75,6 +76,7 @@ class FakeClient:
         return self.data
 
     async def fetch_image(self, _url: str) -> bytes:
+        self.image_calls.append(_url)
         return b"image-bytes"
 
     async def fetch_media_image(self, _url: str) -> bytes:
@@ -124,15 +126,18 @@ class RecordingRenderer(FakeRenderer):
     """Capture optional profile bytes passed to the result renderer."""
 
     def __init__(self) -> None:
+        self.icon_bytes: bytes | None = None
         self.profile_image_bytes: bytes | None = None
 
     def render(
         self,
         *_args: Any,
+        icon_bytes: bytes | None = None,
         profile_image_bytes: bytes | None = None,
         output_path: str | Path | None = None,
         **_kwargs: Any,
     ) -> str:
+        self.icon_bytes = icon_bytes
         self.profile_image_bytes = profile_image_bytes
         return super().render(output_path=output_path)
 
@@ -142,7 +147,7 @@ def config(**overrides: Any) -> dict[str, Any]:
     value: dict[str, Any] = {
         "general": {
             "enabled": True,
-            "api_base_url": "https://api.jx3api.com",
+            "api_base_url": "https://www.jx3api.com",
             "default_server": "梦江南",
         },
         "credentials": {"token": "", "ticket": ""},
@@ -208,7 +213,9 @@ async def test_missing_token_fails_before_network() -> None:
 
 async def test_open_status_uses_default_server_and_fixed_type() -> None:
     plugin = Jx3toolsPlugin(context=object(), config=config())
-    fake_client = FakeClient({"zone": "电信区", "server": "梦江南", "status": 1})
+    fake_client = FakeClient(
+        [{"zone": "电信区", "server": "梦江南", "status": 1}]
+    )
     plugin._client = fake_client  # type: ignore[assignment]
     plugin._initialized = True
 
@@ -280,7 +287,54 @@ async def test_item_search_sends_all_names_before_the_result_image() -> None:
     assert results[1].startswith("image:")
 
 
-async def test_card_sends_identity_then_direct_local_image() -> None:
+async def test_item_records_passes_top_level_view_image_to_renderer() -> None:
+    plugin = Jx3toolsPlugin(
+        context=object(),
+        config=config(
+            credentials={"token": "token"},
+            presentation={"render_mode": "image"},
+        ),
+    )
+    client = FakeClient(
+        {
+            "name": "十五夜观灯",
+            "view": "https://static.nicemoe.cn/item.png",
+            "list": [
+                [
+                    {
+                        "zone": "双线区",
+                        "server": "天鹅坪",
+                        "sale": 1,
+                        "value": 100,
+                        "date": "2026-08-28 23:00:00",
+                    }
+                ]
+            ],
+        }
+    )
+    renderer = RecordingRenderer()
+    plugin._client = client  # type: ignore[assignment]
+    plugin._renderer = renderer  # type: ignore[assignment]
+    plugin._initialized = True
+
+    results = await collect(plugin, "/jx3 物价 十五夜观灯 天鹅坪")
+
+    assert len(results) == 1 and results[0].startswith("image:")
+    assert client.image_calls == ["https://static.nicemoe.cn/item.png"]
+    assert renderer.icon_bytes == b"image-bytes"
+
+
+@pytest.mark.parametrize(
+    ("command", "image_url"),
+    (
+        ("/jx3 名片 天鹅坪 侠士", "https://static.nicemoe.cn/card.png"),
+        ("/jx3 随机名片 天鹅坪", "https://static.nicemoe.cn/random.png"),
+    ),
+)
+async def test_card_sends_identity_then_direct_local_image(
+    command: str,
+    image_url: str,
+) -> None:
     plugin = Jx3toolsPlugin(context=object(), config=config())
     plugin.settings = plugin.settings.__class__.from_config(
         config(credentials={"token": "token"})
@@ -290,13 +344,13 @@ async def test_card_sends_identity_then_direct_local_image() -> None:
             "zoneName": "双线区",
             "serverName": "天鹅坪",
             "roleName": "侠士",
-            "showAvatar": "https://www.jx3api.com/card.png",
+            "showAvatar": image_url,
         }
     )
     plugin._client = fake_client  # type: ignore[assignment]
     plugin._renderer = FakeRenderer()  # type: ignore[assignment]
     plugin._initialized = True
-    event = FakeEvent("/jx3 名片 天鹅坪 侠士")
+    event = FakeEvent(command)
 
     results = [result async for result in plugin.jx3(event)]
 
@@ -305,7 +359,7 @@ async def test_card_sends_identity_then_direct_local_image() -> None:
         f"image:{event.tracked[0]}",
     ]
     assert all("https://" not in result for result in results)
-    assert fake_client.media_calls == ["https://www.jx3api.com/card.png"]
+    assert fake_client.media_calls == [image_url]
 
 
 @pytest.mark.parametrize("card_fails", (False, True))
@@ -342,7 +396,7 @@ async def test_arena_profile_image_is_optional_and_reuses_query_identity(
                 "zoneName": "双线区",
                 "serverName": "天鹅坪",
                 "roleName": "侠士",
-                "showAvatar": "https://www.jx3api.com/card.png",
+                "showAvatar": "https://static.nicemoe.cn/card.png",
             }
 
     plugin = Jx3toolsPlugin(
@@ -370,16 +424,27 @@ async def test_arena_profile_image_is_optional_and_reuses_query_identity(
         None if card_fails else b"media-image-bytes"
     )
     assert client.media_calls == (
-        [] if card_fails else ["https://www.jx3api.com/card.png"]
+        [] if card_fails else ["https://static.nicemoe.cn/card.png"]
     )
 
 
 @pytest.mark.parametrize("command", ("/jx3 新闻 2", "/jx3 公告 2", "/jx3 技改"))
-async def test_article_selection_continues_after_progress_in_framework_order(
+async def test_article_selection_returns_one_url_and_saohua_message(
     command: str,
 ) -> None:
+    class ArticleClient(FakeClient):
+        async def request(
+            self,
+            endpoint: Any,
+            parameters: dict[str, str | int],
+        ) -> Any:
+            self.calls.append((endpoint, parameters))
+            if endpoint.key == "saohua.random":
+                return {"text": "江湖这么大，幸好遇见你。"}
+            return self.data
+
     plugin = Jx3toolsPlugin(context=object(), config=config())
-    plugin._client = FakeClient(
+    client = ArticleClient(
         [
             {
                 "id": 1,
@@ -394,7 +459,8 @@ async def test_article_selection_continues_after_progress_in_framework_order(
                 "url": "https://jx3.xoyo.com/announce/gg.html?id=1335602",
             },
         ]
-    )  # type: ignore[assignment]
+    )
+    plugin._client = client  # type: ignore[assignment]
     plugin._renderer = FakeRenderer()  # type: ignore[assignment]
     plugin._initialized = True
 
@@ -412,26 +478,91 @@ async def test_article_selection_continues_after_progress_in_framework_order(
 
     assert "10 秒内" in start
     assert other == ["当前序号选择仅限本次查询的发起者操作。"]
-    assert await anext(selection_results) == f"image:{owner_event.tracked[0]}"
+    assert await anext(selection_results) == (
+        "https://jx3.xoyo.com/announce/gg.html?id=1335602\n\n"
+        "江湖这么大，幸好遇见你。"
+    )
     assert not owner_event.stopped
     with pytest.raises(StopAsyncIteration):
         await anext(selection_results)
     assert owner_event.stopped
-    expected_sent = [
-        "已选择第 2 条，正在读取新闻正文……".replace(
-            "新闻",
-            command.split()[1],
-        ),
-        "正文已获取，正在本地生成图片……",
-    ]
-    if command == "/jx3 技改":
-        expected_sent.append(
-            "https://jx3.xoyo.com/announce/gg.html?id=1335602"
-        )
-    assert owner_event.sent == expected_sent
+    assert owner_event.sent == []
+    assert owner_event.tracked == []
+    assert client.calls[-1][0].key == "saohua.random"
+    assert client.calls[-1][1] == {}
     assert pending.timeout_task is None
     assert timeout_task is not None and timeout_task.cancelled()
     assert not plugin._pending_articles
+
+
+@pytest.mark.parametrize("saohua_data", ({"text": ""}, JX3ApiError("失败")))
+async def test_article_selection_uses_fixed_saohua_fallback(
+    saohua_data: Any,
+) -> None:
+    class FailingSaohuaClient(FakeClient):
+        async def request(
+            self,
+            endpoint: Any,
+            parameters: dict[str, str | int],
+        ) -> Any:
+            self.calls.append((endpoint, parameters))
+            if endpoint.key == "saohua.random":
+                if isinstance(saohua_data, Exception):
+                    raise saohua_data
+                return saohua_data
+            return self.data
+
+    plugin = Jx3toolsPlugin(context=object(), config=config())
+    plugin._client = FailingSaohuaClient(
+        [
+            {
+                "title": "第一条",
+                "date": "2026-08-28",
+                "url": "https://jx3.xoyo.com/show-2458-7447-1.html",
+            }
+        ]
+    )  # type: ignore[assignment]
+    plugin._initialized = True
+    command_results = plugin.jx3(FakeEvent("/jx3 新闻 1"))
+    await anext(command_results)
+    with pytest.raises(StopAsyncIteration):
+        await anext(command_results)
+    event = FakeEvent("1")
+
+    results = [result async for result in plugin.article_selection(event)]
+
+    assert results == [
+        "https://jx3.xoyo.com/show-2458-7447-1.html\n\n骚话暂时走丢了。"
+    ]
+    assert event.sent == []
+    assert event.tracked == []
+    assert event.stopped
+
+
+async def test_article_selection_rejects_invalid_url_without_requesting_saohua() -> None:
+    plugin = Jx3toolsPlugin(context=object(), config=config())
+    client = FakeClient(
+        [
+            {
+                "title": "恶意链接",
+                "date": "2026-08-28",
+                "url": "https://evil.example/show-2458-7447-1.html",
+            }
+        ]
+    )
+    plugin._client = client  # type: ignore[assignment]
+    plugin._initialized = True
+    command_results = plugin.jx3(FakeEvent("/jx3 新闻 1"))
+    await anext(command_results)
+    with pytest.raises(StopAsyncIteration):
+        await anext(command_results)
+    event = FakeEvent("1")
+
+    results = [result async for result in plugin.article_selection(event)]
+
+    assert results == ["接口未返回可用的剑网 3 官网链接，请稍后重试。"]
+    assert [call[0].key for call in client.calls] == ["news.allnews"]
+    assert event.stopped
 
 
 async def test_article_selection_notifies_timeout_after_list_stream_finishes(
@@ -657,7 +788,7 @@ async def test_reinitialize_clears_a_resolved_startup_error() -> None:
 
     await plugin.initialize()
     await plugin.terminate()
-    plugin.config["general"]["api_base_url"] = "https://api.jx3api.com"
+    plugin.config["general"]["api_base_url"] = "https://www.jx3api.com"
     await plugin.initialize()
     try:
         assert plugin._startup_error == ""

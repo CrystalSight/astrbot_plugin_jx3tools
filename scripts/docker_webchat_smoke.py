@@ -216,11 +216,19 @@ async def run() -> int:
                     for frame in selection_frames
                     if frame.get("type") == "plain"
                 ]
-                selected = any("已选择第 1 条" in text for text in selection_texts)
-                rendered = any("正在本地生成图片" in text for text in selection_texts)
+                selection_text = (
+                    selection_texts[0] if len(selection_texts) == 1 else ""
+                )
+                parts = selection_text.split("\n\n", 1)
+                selected = (
+                    len(parts) == 2
+                    and selection_text.count("\n\n") == 1
+                    and parts[0].startswith("https://jx3.xoyo.com/")
+                    and bool(parts[1].strip())
+                )
                 image = any(frame.get("type") == "image" for frame in selection_frames)
                 false_timeout = any(TIMEOUT_TEXT in text for text in selection_texts)
-                if not selected or not rendered or not image or false_timeout:
+                if not selected or image or false_timeout:
                     raise RuntimeError("Article selection pipeline did not complete cleanly")
 
                 timeout_list_id = f"timeout-list-{uuid.uuid4().hex}"
@@ -244,7 +252,7 @@ async def run() -> int:
                         "list_finish_span_seconds": round(list_finish_span, 3),
                         "list_types": result_types(list_frames),
                         "selection_types": result_types(selection_frames),
-                        "selection_progress": selected and rendered,
+                        "selection_url_and_saying": selected,
                         "selection_image": image,
                         "false_timeout": false_timeout,
                         "timeout_notification": timeout_notified,

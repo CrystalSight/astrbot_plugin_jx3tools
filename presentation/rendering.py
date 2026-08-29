@@ -29,6 +29,7 @@ OMITTED_FIELDS = {
     "icon",
     "id",
     "logoUrl",
+    "send",
     "showAvatar",
     "showHash",
     "token",
@@ -70,6 +71,7 @@ FIELD_LABELS = {
     "level": "等级",
     "luck": "福缘宠物",
     "map": "地图",
+    "mapName": "地图",
     "map_name": "地图",
     "max_level": "最高层数",
     "name": "名称",
@@ -402,17 +404,19 @@ def _daily_document(
         ("orecar", "阵营日常"),
         ("school", "门派事件"),
         ("draw", "美人图"),
-        ("luck", "福缘宠物"),
+        ("lucky", "福缘宠物"),
         ("card", "小周常"),
     ):
         if key in data:
             rows.append(RenderRow(label, _multiline(data[key])))
-    team = data.get("team")
-    if isinstance(team, Sequence) and not isinstance(team, (str, bytes, bytearray)):
-        if len(team) > 0:
-            rows.append(RenderRow("武林通鉴·公共任务", _multiline(team[0])))
-        if len(team) > 1:
-            rows.append(RenderRow("大周常", _multiline(team[1])))
+    weekly = data.get("weekly")
+    if isinstance(weekly, Mapping):
+        if weekly.get("conn") is not None and weekly.get("conn") != "":
+            rows.append(
+                RenderRow("武林通鉴·公共任务", _multiline(weekly["conn"]))
+            )
+        if weekly.get("raid") is not None and weekly.get("raid") != "":
+            rows.append(RenderRow("大周常", _multiline(weekly["raid"])))
     return RenderDocument(
         title=endpoint.name,
         subtitle=endpoint.description,
@@ -427,7 +431,7 @@ def _monthly_document(
 ) -> RenderDocument:
     if not isinstance(data, Mapping):
         return _generic_document(endpoint, data, 31)
-    items = data.get("data", [])
+    items = data.get("total", [])
     parsed: list[tuple[date, Mapping[Any, Any]]] = []
     if isinstance(items, Sequence) and not isinstance(items, (str, bytes, bytearray)):
         for item in items[:31]:
@@ -1067,6 +1071,11 @@ def _role_monster_document(
 ) -> RenderDocument:
     if not isinstance(data, Mapping):
         return _generic_document(endpoint, data, 10)
+    if not data:
+        return RenderDocument(
+            title=endpoint.name,
+            subtitle="该角色暂无百战记录",
+        )
     rows = (
         RenderRow("区服", _server_label(data)),
         RenderRow("角色", _scalar(data.get("roleName", data.get("role_name")))),
@@ -1179,11 +1188,14 @@ def _mapping_rows(value: Mapping[Any, Any]) -> tuple[RenderRow, ...]:
 
 
 def _status_text(data: Any) -> str:
-    if not isinstance(data, Mapping):
+    record = data
+    if isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
+        record = next((item for item in data if isinstance(item, Mapping)), None)
+    if not isinstance(record, Mapping):
         return "区服：-\n开服状态：未开服"
-    status = data.get("status")
+    status = record.get("status")
     opened = status in {1, "1", True, "开服", "正常", "已开服"}
-    return f"区服：{_server_label(data)}\n开服状态：{'开服' if opened else '未开服'}"
+    return f"区服：{_server_label(record)}\n开服状态：{'开服' if opened else '未开服'}"
 
 
 def _card_text(data: Any) -> str:
@@ -1208,12 +1220,16 @@ def _mech_node(value: Any) -> str:
 
 
 def _mech_current(data: Mapping[Any, Any]) -> str:
+    if "nowNode" in data or "nowResult" in data:
+        return _joined_mech_value(data.get("nowNode"), data.get("nowResult"))
     if "now_node" in data or "now_result" in data:
         return _joined_mech_value(data.get("now_node"), data.get("now_result"))
     return _mech_node(data.get("curr"))
 
 
 def _mech_next(data: Mapping[Any, Any]) -> str:
+    if "nextNode" in data or "nextResult" in data:
+        return _joined_mech_value(data.get("nextNode"), data.get("nextResult"))
     if "next_node" in data or "next_result" in data:
         return _joined_mech_value(data.get("next_node"), data.get("next_result"))
     return _mech_node(data.get("next"))
@@ -1226,10 +1242,10 @@ def _joined_mech_value(node: Any, result: Any) -> str:
 
 def _mech_text(data: Any) -> str:
     if not isinstance(data, Mapping):
-        return "【解密】\n当前：暂无结果\n下一时段：暂无结果"
+        return "【秘境方位】\n当前：暂无结果\n下一时段：暂无结果"
     return "\n".join(
         (
-            "【解密】",
+            "【秘境方位】",
             f"当前：{_mech_current(data)}",
             f"下一时段：{_mech_next(data)}",
         )

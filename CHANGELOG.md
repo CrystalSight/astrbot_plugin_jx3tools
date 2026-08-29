@@ -3,6 +3,35 @@
 All notable changes to this project are documented in this file. The project
 uses semantic versioning for plugin releases.
 
+## [0.8.0] - 2026-08-28
+
+### Changed
+
+- Migrated all 27 retained commands from the retired legacy JX3API backup
+  contract to the current `https://www.jx3api.com` routes and request bounds.
+- Consolidated daily and monthly calendar queries on the current calendar
+  endpoint, updated nested article and presentation fields, and made the
+  random-card server explicit while preserving configured server defaults.
+- Updated the default service URL and safely normalized the retired default
+  URL at runtime without persisting or exposing credentials.
+- Changed news, announcement, and rework selections to return one canonical
+  official URL plus a random saying in a single text message instead of an
+  article image.
+- Renamed the primary decrypt command to `秘境方位`, retained its legacy
+  aliases, and adapted its current camel-case response fields.
+
+### Fixed
+
+- Allowed the current exact `static.nicemoe.cn` HTTPS media host so role cards,
+  random cards, arena profiles, and item artwork reach their existing layouts.
+- Hid the internal `send` field from current Chitu output.
+
+### Removed
+
+- Removed legacy `/data/...` routes and the backup-host media URL rewrite.
+- Removed the obsolete server and negative-offset arguments from the daily
+  command. No new JX3API features or commands were added.
+
 ## [0.7.3] - 2026-08-02
 
 ### Changed
