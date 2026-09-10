@@ -1,7 +1,5 @@
 # JX3Tools
 
-[![quality](https://github.com/CrystalSight/astrbot_plugin_jx3tools/actions/workflows/quality.yml/badge.svg)](https://github.com/CrystalSight/astrbot_plugin_jx3tools/actions/workflows/quality.yml)
-
 JX3Tools 是一个 AstrBot 剑网 3 查询插件。它调用注册表中的固定 JX3API 接口，并使用本地
 Pillow 与阿里巴巴普惠体 3 生成适合手机阅读的 720 px 单栏图片；查询数据、文章正文和字体
 不会发送给远程图片渲染服务。
@@ -129,15 +127,9 @@ data/config/astrbot_plugin_jx3tools_config.json
   状态和 AstrBot 日志。
 - **更新后仍是旧代码**：确认 Git 工作树已更新并通过 AstrBot 插件管理器重载本插件。
 
-## 开发与验证
+## 徽记资源维护
 
 ```bash
-python -m pip install -r requirements.txt
-python -m pip install "ruff>=0.15.0" "pyright>=1.1.400" \
-  "pytest>=8.4.1" "pytest-asyncio>=1.1.0"
-ruff check .
-pyright
-pytest
 python scripts/build_adventure_badges.py --check
 ```
 
@@ -153,8 +145,6 @@ python scripts/build_adventure_badges.py --font <MaShanZheng-Regular.ttf 路径>
 错误或不同版本的字体不会改写现有徽记。少量生僻字可由清单显式声明的项目自制透明整词蒙版
 覆盖，`--check` 无需字体即可复核蒙版与正式徽记。新名称在正式徽记补齐前仍会使用本地可读
 回退；异常超长或多行名称会折叠空白、限制为最多两行并受控省略，避免越出徽记。
-
-行为变更还需执行匹配版本的 Docker import、isolated load、正式容器重载和代表性真实冒烟。
 
 ## 安全与反馈
 

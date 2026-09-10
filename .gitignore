@@ -22,3 +22,13 @@ Thumbs.db
 *.otf
 /assets/adventures/*.png
 /assets/bosses/*.png
+
+# Local development files retained in place.
+/AGENTS.md
+/SPEC.md
+/.agents/
+/tests/
+/pyproject.toml
+/scripts/docker_smoke.py
+/scripts/docker_webchat_smoke.py
+/.github/workflows/quality.yml
