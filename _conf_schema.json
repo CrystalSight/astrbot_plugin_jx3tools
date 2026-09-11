@@ -116,5 +116,134 @@
         "default": 30
       }
     }
+  },
+  "push": {
+    "type": "object",
+    "description": "事件推送",
+    "hint": "仅推送到群组配置中登记的目标，与查询开关独立。保存并重载后生效。",
+    "items": {
+      "server_enabled": {
+        "type": "bool",
+        "description": "开服状态推送",
+        "default": false
+      },
+      "news_enabled": {
+        "type": "bool",
+        "description": "官方新闻推送",
+        "default": false
+      },
+      "version_enabled": {
+        "type": "bool",
+        "description": "版本更新推送",
+        "default": false
+      }
+    }
+  },
+  "groups": {
+    "type": "template_list",
+    "description": "群组配置",
+    "hint": "最多 200 个群。登记即允许按有效推送开关接收通知；未登记群仅沿用全局查询配置。",
+    "default": [],
+    "templates": {
+      "group": {
+        "name": "群组",
+        "display_item": "name",
+        "items": {
+          "name": {
+            "type": "string",
+            "description": "群名称备注",
+            "default": ""
+          },
+          "umo": {
+            "type": "string",
+            "description": "群 UMO",
+            "hint": "格式为 平台实例ID:GroupMessage:群ID；不要填写包含群成员 ID 的隔离会话 UMO。重复或非法目标不推送。",
+            "default": ""
+          },
+          "default_server": {
+            "type": "string",
+            "description": "默认区服",
+            "hint": "填写服务器完整名称；留空继承全局。开服推送精确匹配服务器名称。",
+            "default": ""
+          },
+          "query_enabled": {
+            "type": "string",
+            "description": "查询功能",
+            "options": [
+              "继承全局",
+              "开启",
+              "关闭"
+            ],
+            "default": "继承全局"
+          },
+          "free_enabled": {
+            "type": "string",
+            "description": "免费查询",
+            "options": [
+              "继承全局",
+              "开启",
+              "关闭"
+            ],
+            "default": "继承全局"
+          },
+          "member_enabled": {
+            "type": "string",
+            "description": "会员查询",
+            "options": [
+              "继承全局",
+              "开启",
+              "关闭"
+            ],
+            "default": "继承全局"
+          },
+          "other_enabled": {
+            "type": "string",
+            "description": "其他查询",
+            "options": [
+              "继承全局",
+              "开启",
+              "关闭"
+            ],
+            "default": "继承全局"
+          },
+          "push": {
+            "type": "object",
+            "description": "事件推送",
+            "items": {
+              "server_enabled": {
+                "type": "string",
+                "description": "开服状态推送",
+                "options": [
+                  "继承全局",
+                  "开启",
+                  "关闭"
+                ],
+                "default": "继承全局"
+              },
+              "news_enabled": {
+                "type": "string",
+                "description": "官方新闻推送",
+                "options": [
+                  "继承全局",
+                  "开启",
+                  "关闭"
+                ],
+                "default": "继承全局"
+              },
+              "version_enabled": {
+                "type": "string",
+                "description": "版本更新推送",
+                "options": [
+                  "继承全局",
+                  "开启",
+                  "关闭"
+                ],
+                "default": "继承全局"
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

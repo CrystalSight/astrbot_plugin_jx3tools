@@ -3,6 +3,25 @@
 All notable changes to this project are documented in this file. The project
 uses semantic versioning for plugin releases.
 
+## [0.9.0] - 2026-09-11
+
+### Added
+
+- Added per-group default servers and inherited query/category switches, using
+  the platform instance and group identity even with member session isolation.
+- Added independent LV0 server-status, official-news, and version-update pushes
+  for explicitly configured group origins, with grouped configuration controls.
+- Added credential-free WebSocket intake, heartbeat and reconnect backoff,
+  bounded per-group queues, delivery spacing, and persistent 24-hour deduplication.
+- Added exact text formats with Beijing server timestamps, official news dates,
+  and a per-delivery random saying with a five-second fallback budget.
+
+### Changed
+
+- Rechecked AstrBot session plugin selection immediately before proactive sends
+  and cleaned up socket and worker resources when unloading or reloading.
+- Shared the existing article random-saying behavior with push delivery.
+
 ## [0.8.0] - 2026-08-28
 
 ### Changed
