@@ -26,6 +26,8 @@ from .core.endpoints import (
     EndpointSpec,
     ServiceTier,
 )
+from .core.groups import GroupPolicies
+from .core.push import PushService
 from .core.query import QueryInputError, parse_command, parse_endpoint_arguments
 from .core.rate_limit import SessionRateLimiter
 from .core.settings import PluginSettings
@@ -79,6 +81,9 @@ class Jx3toolsPlugin(Star):
         super().__init__(context, config)
         self.config = config or {}
         self.settings = PluginSettings.from_config(self.config)
+        self._groups = GroupPolicies(self.config, self.settings)
+        self._push: PushService | None = None
+        self.logger = getattr(self, "logger", logger)
         self._client: JX3ApiClient | None = None
         self._renderer: LocalImageRenderer | None = None
         self._initialized = False
@@ -93,6 +98,9 @@ class Jx3toolsPlugin(Star):
             return
         self._startup_error = ""
         self.settings = PluginSettings.from_config(self.config)
+        self._groups = GroupPolicies(self.config, self.settings)
+        for error in self._groups.errors:
+            self.logger.warning("JX3Tools configuration: %s", error)
         if self.settings.legacy_base_url_upgraded:
             logger.warning(
                 "JX3Tools replaced the retired legacy API base URL with the current official service"
@@ -114,7 +122,11 @@ class Jx3toolsPlugin(Star):
                 "JX3Tools local fonts are unavailable under plugin_data; image output will fall back to text"
             )
 
-        if self.settings.enabled:
+        if (
+            self.settings.enabled
+            or any(group.settings.enabled for group in self._groups.groups.values())
+            or self._groups.targets
+        ):
             try:
                 client = JX3ApiClient(
                     base_url=self.settings.api_base_url,
@@ -129,13 +141,32 @@ class Jx3toolsPlugin(Star):
             except JX3ApiConfigurationError as exc:
                 self._startup_error = exc.user_message
                 logger.error("JX3Tools network configuration is invalid")
+        if self._groups.targets and self._client is not None:
+            self._push = PushService(
+                self._groups.targets,
+                allowed=self._push_allowed,
+                send=self._send_push,
+                saohua=self._random_saohua,
+                read_kv=self.get_kv_data,
+                write_kv=self.put_kv_data,
+                logger=self.logger,
+            )
+            try:
+                await self._push.start()
+            except Exception:
+                await self._push.stop()
+                self._push = None
+                self.logger.error(
+                    "JX3Tools push initialization failed; reload after checking storage"
+                )
         self._initialized = True
         logger.info("Plugin astrbot_plugin_jx3tools initialized")
 
     @filter.command("jx3", alias={"剑三", "剑网三"})
     async def jx3(self, event: AstrMessageEvent):
         """Handle help, validation, querying, and local rendering."""
-        if not self.settings.enabled:
+        settings = self._groups.for_event(event)
+        if not settings.enabled:
             yield event.plain_result("JX3Tools 当前已由管理员禁用。")
             return
         if not self._initialized:
@@ -157,11 +188,11 @@ class Jx3toolsPlugin(Star):
 
             endpoint = command.endpoint
             assert endpoint is not None
-            self._validate_access(endpoint)
+            self._validate_access(endpoint, settings)
             parameters = parse_endpoint_arguments(
                 endpoint,
                 command.arguments,
-                default_server=self.settings.default_server,
+                default_server=settings.default_server,
             )
             parameters.update(dict(endpoint.fixed_parameters))
             await self._check_article_lock(event, endpoint)
@@ -292,22 +323,11 @@ class Jx3toolsPlugin(Star):
                 pending.items[index - 1],
             )
             if not selected_url:
-                yield event.plain_result("接口未返回可用的剑网 3 官网链接，请稍后重试。")
-                return
-            try:
-                saohua_data = await client.request(
-                    ENDPOINT_INDEX["saohua.random"],
-                    {},
+                yield event.plain_result(
+                    "接口未返回可用的剑网 3 官网链接，请稍后重试。"
                 )
-                saohua = format_text(
-                    ENDPOINT_INDEX["saohua.random"],
-                    saohua_data,
-                    max_items=self.settings.max_items,
-                ).strip()
-            except JX3ApiError:
-                saohua = ""
-            if not saohua or saohua == "-":
-                saohua = "骚话暂时走丢了。"
+                return
+            saohua = await self._random_saohua()
             yield event.plain_result(f"{selected_url}\n\n{saohua}")
         finally:
             if callable(stop_event):
@@ -316,6 +336,9 @@ class Jx3toolsPlugin(Star):
     async def terminate(self) -> None:
         """Close resources and clear ephemeral state idempotently."""
         self._initialized = False
+        if self._push is not None:
+            await self._push.stop()
+            self._push = None
         await self._clear_pending_articles()
         client = self._client
         self._client = None
@@ -325,13 +348,42 @@ class Jx3toolsPlugin(Star):
         self._rate_limiter.clear()
         logger.info("Plugin astrbot_plugin_jx3tools terminated")
 
-    def _validate_access(self, endpoint: EndpointSpec) -> None:
-        if not self.settings.tier_enabled[endpoint.tier]:
+    def _validate_access(
+        self, endpoint: EndpointSpec, settings: PluginSettings | None = None
+    ) -> None:
+        settings = settings or self.settings
+        if not settings.tier_enabled[endpoint.tier]:
             raise QueryInputError(f"{TIER_LABELS[endpoint.tier]}功能已由管理员关闭。")
         if endpoint.requires_token and not self.settings.token:
             raise QueryInputError("该功能需要 JX3API Token，请管理员在插件配置中填写。")
         if endpoint.requires_ticket and not self.settings.ticket:
             raise QueryInputError("该功能还需要推栏 Ticket，请管理员补充配置。")
+
+    async def _random_saohua(self) -> str:
+        """Reuse the query formatter with a strict five-second total budget."""
+        try:
+            async with asyncio.timeout(5):
+                if self._client is not None:
+                    endpoint = ENDPOINT_INDEX["saohua.random"]
+                    data = await self._client.request(endpoint, {})
+                    text = format_text(
+                        endpoint, data, max_items=self.settings.max_items
+                    ).strip()
+                    if text and text != "-":
+                        return text
+        except Exception:
+            self.logger.info("JX3Tools random phrase unavailable; using fallback")
+        return "骚话暂时走丢了。"
+
+    def _push_allowed(self, umo: str) -> bool:
+        """Honor the current AstrBot session plugin selection before sending."""
+        selected = self.context.get_config(umo).get("plugin_set", ["*"])
+        return isinstance(selected, list) and (
+            selected == ["*"] or PLUGIN_NAME in selected
+        )
+
+    async def _send_push(self, umo: str, text: str) -> bool:
+        return await self.context.send_message(umo, MessageChain().message(text))
 
     def _help_text(self, keyword: str) -> str:
         if keyword:
@@ -345,13 +397,14 @@ class Jx3toolsPlugin(Star):
                     for endpoint in ENDPOINTS
                     if normalized in endpoint.name.casefold()
                     or normalized in endpoint.description.casefold()
-                    or any(
-                        normalized in alias.casefold() for alias in endpoint.aliases
-                    )
+                    or any(normalized in alias.casefold() for alias in endpoint.aliases)
                 ][:20]
             if not matches:
                 return f"没有找到与“{keyword}”相关的功能。使用 /jx3 指令 查看分组。"
-            lines = [f"【JX3Tools · 搜索“{keyword}”】", "说明：<参数> 必填，[参数] 可选。"]
+            lines = [
+                f"【JX3Tools · 搜索“{keyword}”】",
+                "说明：<参数> 必填，[参数] 可选。",
+            ]
             lines.extend(_endpoint_help_line(endpoint) for endpoint in matches)
             return "\n".join(lines)
 
@@ -405,10 +458,14 @@ class Jx3toolsPlugin(Star):
             return False
         if endpoint.output == "image" or self.settings.render_mode == "image":
             return True
-        return isinstance(data, Sequence) and not isinstance(
-            data,
-            (str, bytes, bytearray),
-        ) and len(data) > 3
+        return (
+            isinstance(data, Sequence)
+            and not isinstance(
+                data,
+                (str, bytes, bytearray),
+            )
+            and len(data) > 3
+        )
 
     async def _check_article_lock(
         self,
@@ -479,11 +536,11 @@ class Jx3toolsPlugin(Star):
             title = " ".join(
                 str(item.get("title", details.get("title", "未命名"))).split()
             )[:100]
-            date = " ".join(
-                str(item.get("date", item.get("time", ""))).split()
-            )[:32]
+            date = " ".join(str(item.get("date", item.get("time", ""))).split())[:32]
             lines.append(f"{index}. {title}{f'（{date}）' if date else ''}")
-        lines.append(f"请由发起者在 {int(ARTICLE_SELECTION_SECONDS)} 秒内回复纯数字序号。")
+        lines.append(
+            f"请由发起者在 {int(ARTICLE_SELECTION_SECONDS)} 秒内回复纯数字序号。"
+        )
         return pending, "\n".join(lines)
 
     async def _expire_article_selection(
