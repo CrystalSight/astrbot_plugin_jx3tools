@@ -314,6 +314,11 @@ def format_text(
         lines.extend(
             f"{node.index}. {node.name}" for node in render_document.map_nodes
         )
+    for group in render_document.adventure_groups:
+        lines.append(group.title)
+        lines.extend(f"{item.name}：{item.trigger_time}" for item in group.items)
+    for food in render_document.food_rows:
+        lines.append(f"{food.school} · {food.kungfu}：{'、'.join(food.items)}")
     lines.extend(render_document.paragraphs)
     text = "\n".join(lines)
     if len(text) > max_characters:
@@ -664,6 +669,24 @@ def _matrix_document(
     data: Any,
     _max_items: int,
 ) -> RenderDocument:
+    if isinstance(data, list):
+        cards: list[RenderCard] = []
+        for item in data:
+            if not isinstance(item, Mapping):
+                continue
+            levels = item.get("levels", [])
+            rows = [RenderRow("说明", _scalar(item.get("desc")))]
+            if isinstance(levels, list):
+                valid = [level for level in levels if isinstance(level, Mapping)
+                         and type(level.get("level")) is int
+                         and 1 <= level["level"] <= 6]
+                rows.extend(RenderRow(str(level["level"]), _scalar(level.get("desc")))
+                            for level in sorted(valid, key=lambda value: value["level"]))
+            cards.append(RenderCard(_scalar(item.get("name")), tuple(rows)))
+        return RenderDocument(
+            title=endpoint.name, subtitle=endpoint.description,
+            sections=(RenderSection("阵眼详情", tuple(cards)),),
+        )
     if not isinstance(data, Mapping):
         return _generic_document(endpoint, data, 30)
     effects = data.get("data", [])

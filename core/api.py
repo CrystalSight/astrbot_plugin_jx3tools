@@ -109,11 +109,10 @@ class JX3ApiClient:
             raise JX3ApiError("JX3API 客户端尚未就绪，请稍后再试。")
 
         payload: dict[str, str | int] = dict(parameters)
-        if endpoint.requires_token and self.token:
-            payload["token"] = self.token
+        payload.pop("token", None)
         if endpoint.requires_ticket and self.ticket:
             payload["ticket"] = self.ticket
-        secrets = tuple(
+        secrets = (self.token, self.ticket) + tuple(
             str(value)
             for key, value in payload.items()
             if key in {"ticket", "token"} and value
@@ -158,6 +157,7 @@ class JX3ApiClient:
             async with self._session.post(
                 f"{self.base_url}{endpoint.path}",
                 json=payload,
+                headers={"token": self.token} if endpoint.requires_token else {},
                 allow_redirects=False,
             ) as response:
                 return await self._decode_response(
@@ -335,9 +335,10 @@ class JX3ApiClient:
         if not isinstance(document, dict):
             raise JX3ApiError("JX3API 返回结构不符合预期。")
 
-        code = document.get("code")
+        modern = "status" in document
+        code = document.get("status" if modern else "code")
         if code != 200:
-            message = _safe_api_message(document.get("msg"), secrets=secrets)
+            message = _safe_api_message(document.get("detail" if modern else "msg"), secrets=secrets)
             if (
                 endpoint.key in {"chitu.records", "chitu.week_records"}
                 and code == 400
@@ -356,7 +357,7 @@ class JX3ApiClient:
                 )
             detail = f"：{message}" if message else ""
             raise JX3ApiError(f"JX3API 查询失败（{code!s}）{detail}。")
-        return document.get("data")
+        return document.get("detail" if modern else "data")
 
     @staticmethod
     async def _read_bounded(
@@ -524,5 +525,6 @@ def _safe_api_message(value: Any, *, secrets: tuple[str, ...]) -> str:
         return ""
     cleaned = " ".join(value.split())
     for secret in secrets:
-        cleaned = cleaned.replace(secret, "[redacted]")
+        if secret:
+            cleaned = cleaned.replace(secret, "[redacted]")
     return cleaned[:120]

@@ -49,7 +49,9 @@ def _text(detail: Mapping[str, Any], key: str, limit: int = 1024) -> str:
 
 def parse_push(payload: Any) -> PushEvent | None:
     """Validate the three supported envelopes and produce exact plain text."""
-    if not isinstance(payload, Mapping) or payload.get("status") != "success":
+    if not isinstance(payload, Mapping):
+        return None
+    if "status" in payload and payload["status"] != "success":
         return None
     action = payload.get("action")
     if type(action) is not int or action not in (2001, 2002, 2003):

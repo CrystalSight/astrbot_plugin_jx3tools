@@ -1,3 +1,11 @@
+# 未发布
+
+- 真实全量接口验证后适配新版阵眼六层效果，补全小药与奇遇文本输出，修复空凭据导致错误提示被破坏。
+
+- 适配 JX3API status/detail 响应和 Token 请求头鉴权，保留旧响应兼容。
+- 阵眼改用 kungfu，取消 Ticket 要求，帮助展示 Token 等级。
+- 接受新版 action/detail 推送信封，保留旧成功信封兼容。
+
 # Changelog
 
 All notable changes to this project are documented in this file. The project

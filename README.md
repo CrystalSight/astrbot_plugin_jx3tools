@@ -69,7 +69,7 @@ AstrBot/data/plugin_data/astrbot_plugin_jx3tools/fonts/
   当前主站。
 - 免费、会员、其他功能可分别关闭。
 - JX3API Token 只发送给明确需要 Token 的接口；Ticket 只发送给明确需要 Ticket 的接口。
-- 角色、交易、随机名片和秘境方位等会员功能需要换新后的 Token；阵眼和名剑战绩还需要 Ticket。
+- 角色、交易、随机名片和秘境方位等会员功能需要换新后的 Token；名剑战绩还需要 Ticket。
   免费功能不携带 Token 或 Ticket。
 - Token 和 Ticket 需要由管理员通过 JX3API 的账户或服务渠道取得，不要让聊天用户提供凭据。
 - 默认区服只补齐 `server` 参数，聊天用户不能覆盖凭据、URL 或 API 路径。
@@ -221,3 +221,9 @@ python scripts/build_adventure_badges.py --font <MaShanZheng-Regular.ttf 路径>
 本仓库分发且不再由维护脚本下载；Ma Shan Zheng 仅作为 OFL 离线制图工具，字体文件不分发。
 阿里巴巴普惠体 3、第三方名称、商标及游戏素材不自动包含在 MIT 授权中；详见
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+### 2026 年 11 月 API 兼容
+
+查询采用官方 `status/detail` 响应，兼容旧版响应。Token 通过请求头发送。
+名片、随机名片、赤兔、百战和诛恶需要 LV.2；其余会员查询需要 LV.1。
+阵眼使用完整心法名称，可继续使用 `name=`，也支持 `kungfu=`，不再需要 Ticket。

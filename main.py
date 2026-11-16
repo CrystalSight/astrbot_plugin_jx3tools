@@ -649,6 +649,8 @@ class Jx3toolsPlugin(Star):
 
 def _endpoint_help_line(endpoint: EndpointSpec) -> str:
     lines = [f"- {endpoint.name}", f"  {endpoint.description}", f"  {endpoint.usage}"]
+    if endpoint.token_level:
+        lines.append(f"  需要 LV.{endpoint.token_level} 或更高等级 Token。")
     if endpoint.key == "exam.search":
         lines.append("  示例：单选题：古琴有几根弦（DXTGQYJGX）")
     return "\n".join(lines)

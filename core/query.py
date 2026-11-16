@@ -98,6 +98,9 @@ def parse_endpoint_arguments(
         parameters_by_alias[parameter.name.casefold()] = parameter
         parameters_by_alias[parameter.label.casefold()] = parameter
 
+    if endpoint.key == "school.matrix":
+        parameters_by_alias["name"] = parameters_by_alias["kungfu"]
+
     for token in arguments:
         if "=" not in token:
             positional.append(token)

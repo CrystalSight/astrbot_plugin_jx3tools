@@ -59,6 +59,17 @@ class EndpointSpec:
     article_kind: str = ""
 
     @property
+    def token_level(self) -> int:
+        """Return the minimum documented token level."""
+        if not self.requires_token:
+            return 0
+        return 2 if self.path in {
+            "/card/random", "/card/record", "/chitu/records",
+            "/chitu/week/records", "/monster/records",
+            "/monster/weekly", "/wicked/records",
+        } else 1
+
+    @property
     def usage(self) -> str:
         """Return command usage without exposing internal endpoint details."""
         suffix = " ".join(parameter.usage for parameter in self.parameters)
@@ -225,9 +236,8 @@ ENDPOINTS: tuple[EndpointSpec, ...] = (
         "/school/matrix",
         ServiceTier.MEMBER,
         "查询指定心法的阵眼及 1–6 层效果。",
-        (text("name", "心法", required=True),),
+        (text("kungfu", "心法", required=True),),
         requires_token=True,
-        requires_ticket=True,
         output="image",
     ),
     EndpointSpec(
