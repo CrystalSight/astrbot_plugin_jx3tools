@@ -32,12 +32,14 @@
       "token": {
         "type": "string",
         "description": "JX3API Token",
+        "secret": true,
         "obvious_hint": true,
         "default": ""
       },
       "ticket": {
         "type": "string",
         "description": "推栏 Ticket",
+        "secret": true,
         "hint": "仅名剑战绩接口使用。",
         "obvious_hint": true,
         "default": ""

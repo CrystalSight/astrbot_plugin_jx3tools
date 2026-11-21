@@ -22,7 +22,7 @@ from .rendering import (
     TableRow,
 )
 
-ASSET_DIRECTORY = Path(__file__).resolve().parents[1] / "assets"
+ASSET_DIRECTORY = Path(__file__).resolve().parents[2] / "resources"
 
 CANVAS_WIDTH = 720
 MAX_CANVAS_HEIGHT = 12_000

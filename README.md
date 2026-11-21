@@ -192,6 +192,8 @@ AstrBot 的会话配置可以选择可用插件，本插件内部的区服和开
 
 ## 徽记资源维护
 
+维护者在配套的外部开发目录执行以下命令，先将环境变量 `ASTRBOT_PLUGIN_ROOT` 设为插件源码的绝对路径。成品位于 `resources/adventure_badges/`。
+
 ```bash
 python scripts/build_adventure_badges.py --check
 ```

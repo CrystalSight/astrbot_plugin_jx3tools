@@ -10,8 +10,8 @@ MIT License.
 The maintainer's local working copy may contain 72 px thumbnails derived from
 images served by JX3BOX in the following directories:
 
-- `assets/adventures/`
-- `assets/bosses/`
+- `resources/adventures/`
+- `resources/bosses/`
 
 Source catalogues and image endpoints:
 
