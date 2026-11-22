@@ -120,7 +120,7 @@ class Jx3toolsPlugin(QueryOperations, Star):
         self._initialized = True
         self.logger.info("Plugin astrbot_plugin_jx3tools initialized")
 
-    @filter.command("jx3", alias={"剑三", "剑网三"})
+    @filter.command("jx3", alias={"剑三", "剑网三", "在线", "装备"})
     async def jx3(self, event: AstrMessageEvent):
         """Dispatch the query through the public command."""
         async with aclosing(self.query_results(event)) as results:

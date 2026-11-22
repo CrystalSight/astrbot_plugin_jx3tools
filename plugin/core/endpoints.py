@@ -64,7 +64,7 @@ class EndpointSpec:
         if not self.requires_token:
             return 0
         return 2 if self.path in {
-            "/card/random", "/card/record", "/chitu/records",
+            "/calcd/attribute", "/card/random", "/card/record", "/chitu/records",
             "/chitu/week/records", "/monster/records",
             "/monster/weekly", "/wicked/records",
         } else 1
@@ -221,12 +221,36 @@ ENDPOINTS: tuple[EndpointSpec, ...] = (
     EndpointSpec(
         "role.detail",
         "角色",
-        ("角色信息", "装备"),
+        ("角色信息",),
         "/role/detail",
         ServiceTier.MEMBER,
         "查询角色基础资料。",
         (SERVER, NAME),
         requires_token=True,
+        output="image",
+    ),
+    EndpointSpec(
+        "role.online",
+        "在线",
+        (),
+        "/role/online/status",
+        ServiceTier.MEMBER,
+        "使用服务器全名查询角色在线状态，需要推栏 Ticket。",
+        (text("server", "服务器全名", required=True), NAME),
+        requires_token=True,
+        requires_ticket=True,
+        output="text",
+    ),
+    EndpointSpec(
+        "role.equipment",
+        "装备",
+        (),
+        "/calcd/attribute",
+        ServiceTier.MEMBER,
+        "查询角色的装备和属性，支持主服名、别名和次服名。",
+        (SERVER, NAME),
+        requires_token=True,
+        fixed_parameters=(("format", "calcd"),),
         output="image",
     ),
     EndpointSpec(

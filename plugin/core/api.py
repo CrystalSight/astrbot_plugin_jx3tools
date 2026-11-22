@@ -7,7 +7,7 @@ import json
 import re
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 import aiohttp
 
@@ -102,7 +102,7 @@ class JX3ApiClient:
         endpoint: EndpointSpec,
         parameters: dict[str, str | int],
     ) -> Any:
-        """POST one whitelisted current query and return its validated data field."""
+        """Query a registered endpoint and return its validated data field."""
         if not _is_fixed_endpoint_path(endpoint.path):
             raise JX3ApiConfigurationError("插件接口注册表包含无效路径。")
         if not self.started:
@@ -154,12 +154,17 @@ class JX3ApiClient:
     ) -> Any:
         assert self._session is not None
         async with self._semaphore:
-            async with self._session.post(
-                f"{self.base_url}{endpoint.path}",
-                json=payload,
-                headers={"token": self.token} if endpoint.requires_token else {},
-                allow_redirects=False,
-            ) as response:
+            url = f"{self.base_url}{endpoint.path}"
+            headers = {"token": self.token} if endpoint.requires_token else {}
+            if endpoint.key == "role.equipment":
+                request = self._session.get(url, params=payload, headers=headers, allow_redirects=False)
+            else:
+                body = (
+                    {"query": [{"server": payload["server"], "name": payload["name"]}], "ticket": self.ticket}
+                    if endpoint.key == "role.online" else payload
+                )
+                request = self._session.post(url, json=body, headers=headers, allow_redirects=False)
+            async with request as response:
                 return await self._decode_response(
                     response,
                     endpoint=endpoint,
@@ -232,6 +237,32 @@ class JX3ApiClient:
         content = body.decode("utf-8", errors="replace")
         return "" if "接口参数异常" in content else content
 
+    async def enchant_icon(self, name: str) -> str:
+        """Resolve the exact enchant item name on JX3BOX without credentials."""
+        if not self._session:
+            return ""
+        url = "https://node.jx3box.com/item/name/" + quote(name, safe="")
+        async with self._semaphore:
+            async with self._session.get(
+                url, params={"client": "std", "strict": 1, "per": 1}, allow_redirects=False
+            ) as response:
+                if response.status != 200:
+                    return ""
+                data = json.loads(await self._read_bounded(response, 64_000))
+                rows = data.get("list") if isinstance(data, dict) else None
+                if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+                    if rows[0].get("Name") == name:
+                        icon = str(rows[0].get("IconID", ""))
+                        if re.fullmatch(r"[1-9][0-9]{0,8}", icon):
+                            return f"https://icon.jx3box.com/icon/{icon}.png"
+        return ""
+
+    async def fetch_equipment_icon(self, url: str) -> bytes:
+        """Fetch a small optional icon without media retries."""
+        if not self.started or not _is_allowed_image_url(url):
+            raise JX3ApiError("图标地址不可用。")
+        return await self._fetch_image_once(url, byte_limit=128 * 1024)
+
     async def fetch_image(self, url: str) -> bytes:
         """Download one bounded raster image with retries from a trusted domain."""
         if not _is_allowed_image_url(url):
@@ -281,6 +312,7 @@ class JX3ApiClient:
         url: str,
         *,
         request_timeout: aiohttp.ClientTimeout | None = None,
+        byte_limit: int = MAX_IMAGE_BYTES,
     ) -> bytes:
         assert self._session is not None
         try:
@@ -296,7 +328,7 @@ class JX3ApiClient:
                     content_type = response.headers.get("Content-Type", "").split(";")[0]
                     if content_type not in {"image/png", "image/jpeg", "image/webp"}:
                         raise JX3ApiError("接口返回的图片格式不受支持。")
-                    return await self._read_bounded(response, MAX_IMAGE_BYTES)
+                    return await self._read_bounded(response, byte_limit)
         except TimeoutError as exc:
             raise JX3ApiError("图片下载超时，请稍后重试。") from exc
         except aiohttp.ClientError as exc:

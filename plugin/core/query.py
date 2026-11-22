@@ -48,14 +48,17 @@ def parse_command(message: str) -> ParsedCommand:
         (
             index
             for index, token in enumerate(tokens[:3])
-            if token.lstrip("/").casefold() in COMMAND_ALIASES
+            if token.lstrip("/").casefold() in COMMAND_ALIASES | {"在线", "装备"}
         ),
         None,
     )
     if command_index is None:
         raise QueryInputError("请使用 /jx3 帮助 查看用法。")
 
+    command_name = tokens[command_index].lstrip("/").casefold()
     query_tokens = tokens[command_index + 1 :]
+    if command_name in {"在线", "装备"}:
+        query_tokens.insert(0, command_name)
     if not query_tokens:
         return ParsedCommand(action="help")
 

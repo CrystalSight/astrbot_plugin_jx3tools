@@ -76,6 +76,7 @@ class LocalImageRenderer:
     """Generate one 720 px single-column raster image without remote services."""
 
     def __init__(self, font_paths: FontPaths) -> None:
+        self.font_paths = font_paths
         if not font_paths.available:
             raise LocalRenderError("阿里巴巴普惠体文件缺失。")
         try:

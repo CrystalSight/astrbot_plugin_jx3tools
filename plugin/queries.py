@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.star import Context
@@ -30,6 +31,8 @@ from .core.groups import GroupPolicies
 from .core.query import QueryInputError, parse_command, parse_endpoint_arguments
 from .core.rate_limit import SessionRateLimiter
 from .core.settings import PluginSettings
+from .presentation.equipment import Equipment, equipment_from, online_result
+from .presentation.equipment_image import render_equipment
 from .presentation.image_renderer import (
     LocalImageRenderer,
     LocalRenderError,
@@ -133,6 +136,30 @@ class QueryOperations:
             yield event.plain_result(_friendly_api_error(endpoint, exc))
             return
 
+        if endpoint.key == "role.online":
+            yield event.plain_result(online_result(data, str(parameters["server"]), str(parameters["name"])))
+            return
+        if endpoint.key == "role.equipment":
+            sheet = equipment_from(data, str(parameters["server"]), str(parameters["name"]))
+            if sheet is None:
+                yield event.plain_result("未找到已收录的角色装备，请检查区服和角色名。")
+                return
+            renderer = self._renderer
+            if renderer is None or not self._should_render_image(endpoint, data):
+                yield event.plain_result(sheet.as_text())
+                return
+            try:
+                async with self._render_semaphore:
+                    icons = await _equipment_icons(client, sheet)
+                    image_path = await _run_tracked_file_job(
+                        event, render_equipment, sheet, icons, renderer.font_paths
+                    )
+            except (LocalRenderError, OSError):
+                self.logger.warning("JX3Tools equipment rendering failed")
+                yield event.plain_result(sheet.as_text())
+                return
+            yield event.image_result(image_path)
+            return
         if endpoint.output == "article":
             _pending, message = await self._start_article_selection(
                 event,
@@ -540,6 +567,25 @@ class QueryOperations:
         except JX3ApiError:
             self.logger.info("JX3Tools optional arena profile image was not downloaded")
             return None
+
+
+async def _equipment_icons(client: JX3ApiClient, sheet: Equipment) -> dict[str, bytes]:
+    assets: dict[str, bytes] = {}
+
+    async def load(key: str) -> None:
+        try:
+            url = await client.enchant_icon(key[8:]) if key.startswith("enchant:") else key
+            if url:
+                assets[key] = await client.fetch_equipment_icon(url)
+        except (JX3ApiError, aiohttp.ClientError, ValueError, TimeoutError):
+            return
+
+    try:
+        async with asyncio.timeout(15):
+            await asyncio.gather(*(load(key) for key in sheet.icons()))
+    except TimeoutError:
+        pass
+    return assets
 
 
 def _endpoint_help_line(endpoint: EndpointSpec) -> str:

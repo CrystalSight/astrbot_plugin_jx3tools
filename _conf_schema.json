@@ -40,7 +40,7 @@
         "type": "string",
         "description": "推栏 Ticket",
         "secret": true,
-        "hint": "仅名剑战绩接口使用。",
+        "hint": "名剑战绩和角色在线查询使用。",
         "obvious_hint": true,
         "default": ""
       }
